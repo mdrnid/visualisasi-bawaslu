@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Direktori dan dashboard analitik personel" />
+<title>Direktori &amp; Dashboard Personel</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<link rel="stylesheet" href="./assets/css/styles.css" />
+</head>
+<body>
+<a class="skip-link" href="#main">Lewati ke konten utama</a>
+
+<header class="appbar">
+  <div class="appbar__inner">
+    <div class="brand">
+      <div class="brand__mark" aria-hidden="true">DP</div>
+      <div>
+        <h1 class="brand__title" id="appName">Direktori &amp; Dashboard Personel</h1>
+        <p class="brand__sub" id="appOrg">Memuat sumber data…</p>
+      </div>
+    </div>
+    <div class="appbar__actions">
+      <span class="pill" id="sourceBadge" title="Sumber data">—</span>
+      <button class="btn btn--ghost" id="btnRefresh" type="button">Muat Ulang Data</button>
+      <button class="btn btn--primary" id="btnExport" type="button">Ekspor CSV</button>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab is-active" role="tab" data-view="overview">Ringkasan</button>
+    <button class="tab" role="tab" data-view="directory">Direktori</button>
+    <button class="tab" role="tab" data-view="table">Tabel Data</button>
+    <button class="tab" role="tab" data-view="quality">Kualitas Data <span class="badge" id="qualityBadge" hidden>0</span></button>
+  </nav>
+</header>
+
+<main id="main" class="container">
+
+  <section id="stateBox" class="state" aria-live="polite">
+    <div class="spinner" aria-hidden="true"></div>
+    <p id="stateText">Memuat data dari <code>data/personel.xlsx</code>…</p>
+  </section>
+
+  <section id="filterBar" class="panel filterbar" hidden>
+    <div class="field field--grow">
+      <label for="fSearch">Pencarian</label>
+      <input type="search" id="fSearch" placeholder="Nama, jabatan, email, alamat, instansi…" autocomplete="off" />
+    </div>
+    <div class="field"><label for="fProvinsi">Provinsi</label><select id="fProvinsi"></select></div>
+    <div class="field"><label for="fJabatan">Jabatan</label><select id="fJabatan"></select></div>
+    <div class="field"><label for="fGender">Jenis Kelamin</label><select id="fGender"></select></div>
+    <div class="field"><label for="fPendidikan">Pendidikan</label><select id="fPendidikan"></select></div>
+    <div class="field"><label for="fAgama">Agama</label><select id="fAgama"></select></div>
+    <div class="field field--auto">
+      <label>&nbsp;</label>
+      <button class="btn btn--ghost" id="btnReset" type="button">Reset Filter</button>
+    </div>
+  </section>
+
+  <!-- ============ RINGKASAN ============ -->
+  <section class="view" data-view="overview" hidden>
+    <div class="kpi-grid" id="kpiGrid"></div>
+    <div class="chart-grid">
+      <article class="panel chart chart--wide">
+        <header class="panel__head"><h2>Sebaran Personel per Provinsi</h2><span class="hint" id="hintProv"></span></header>
+        <div class="canvas-wrap canvas-wrap--tall"><canvas id="chProvinsi"></canvas></div>
+      </article>
+      <article class="panel chart">
+        <header class="panel__head"><h2>Komposisi Jenis Kelamin</h2></header>
+        <div class="canvas-wrap"><canvas id="chGender"></canvas></div>
+      </article>
+      <article class="panel chart">
+        <header class="panel__head"><h2>Jenjang Pendidikan</h2></header>
+        <div class="canvas-wrap"><canvas id="chPendidikan"></canvas></div>
+      </article>
+      <article class="panel chart">
+        <header class="panel__head"><h2>Distribusi Jabatan (Top 12)</h2></header>
+        <div class="canvas-wrap"><canvas id="chJabatan"></canvas></div>
+      </article>
+      <article class="panel chart">
+        <header class="panel__head"><h2>Penugasan Khusus</h2><span class="hint">Wakor / Div / AM / Jaga</span></header>
+        <div class="canvas-wrap"><canvas id="chPenugasan"></canvas></div>
+      </article>
+      <article class="panel chart">
+        <header class="panel__head"><h2>Komposisi Agama</h2></header>
+        <div class="canvas-wrap"><canvas id="chAgama"></canvas></div>
+      </article>
+      <article class="panel chart">
+        <header class="panel__head"><h2>Kelengkapan Atribut</h2><span class="hint">% terisi</span></header>
+        <div class="canvas-wrap"><canvas id="chKelengkapan"></canvas></div>
+      </article>
+      <article class="panel chart chart--wide">
+        <header class="panel__head"><h2>Pendidikan per Provinsi</h2><span class="hint">bertumpuk</span></header>
+        <div class="canvas-wrap canvas-wrap--tall"><canvas id="chSilang"></canvas></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ DIREKTORI ============ -->
+  <section class="view" data-view="directory" hidden>
+    <div class="panel__head panel__head--bare">
+      <h2>Direktori Personel <span class="muted" id="dirCount"></span></h2>
+      <div class="seg">
+        <label for="dirSort" class="sr-only">Urutkan</label>
+        <select id="dirSort">
+          <option value="nama">Urut: Nama (A–Z)</option>
+          <option value="provinsi">Urut: Provinsi</option>
+          <option value="jabatan">Urut: Jabatan</option>
+          <option value="kelengkapan">Urut: Kelengkapan data</option>
+        </select>
+      </div>
+    </div>
+    <div class="dir-grid" id="dirGrid"></div>
+    <div class="center"><button class="btn btn--ghost" id="btnMore" type="button" hidden>Tampilkan lebih banyak</button></div>
+  </section>
+
+  <!-- ============ TABEL ============ -->
+  <section class="view" data-view="table" hidden>
+    <div class="panel">
+      <div class="tbl-scroll"><table id="grid"><thead></thead><tbody></tbody></table></div>
+      <div class="pager">
+        <span class="muted" id="pagerInfo"></span>
+        <div class="pager__ctrl">
+          <label for="pageSize" class="sr-only">Baris per halaman</label>
+          <select id="pageSize"><option>25</option><option>50</option><option>100</option><option>250</option></select>
+          <button class="btn btn--ghost" id="prevPage" type="button">Sebelumnya</button>
+          <button class="btn btn--ghost" id="nextPage" type="button">Berikutnya</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ KUALITAS DATA ============ -->
+  <section class="view" data-view="quality" hidden>
+    <div class="panel pad" id="qualitySummary"></div>
+    <div class="panel"><div class="tbl-scroll"><table id="issueTable"><thead></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <footer class="foot">
+    <span id="footMeta"></span> · Data diproses sepenuhnya di peramban Anda; tidak ada pengiriman ke pihak ketiga.
+  </footer>
+</main>
+
+<!-- Panel detail -->
+<div class="drawer" id="drawer" hidden>
+  <div class="drawer__scrim" data-close></div>
+  <aside class="drawer__panel" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+    <header class="drawer__head">
+      <h2 id="drawerTitle">Detail</h2>
+      <button class="btn btn--icon" data-close aria-label="Tutup">×</button>
+    </header>
+    <div class="drawer__body" id="drawerBody"></div>
+  </aside>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js" defer></script>
+<script type="module" src="./assets/js/app.js"></script>
+</body>
+</html>
