@@ -29,13 +29,7 @@ export function completeness(records) {
     }));
 }
 
-export function assignmentCounts(records) {
-    const keys = [['wakor', 'Wakor'], ['div', 'Div'], ['am', 'AM'], ['jaga', 'Jaga']];
-    return {
-        labels: keys.map((k) => k[1]),
-        values: keys.map(([k]) => records.filter((r) => r[k]).length),
-    };
-}
+
 
 /** Tabulasi silang untuk grafik bertumpuk. */
 export function crossTab(records, rowKey, colKey, { rowLimit = 10 } = {}) {

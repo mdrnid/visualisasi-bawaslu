@@ -88,7 +88,7 @@ function render() {
     C.donutChart('chGender', A.countBy(rows, 'gender'));
     C.donutChart('chPendidikan', A.countBy(rows, 'pendidikan', { sort: 'label' }));
     C.barChart('chJabatan', A.countBy(rows, 'jabatan', { limit: APP_CONFIG.ui.topJabatan }), { horizontal: true, color: C.PALETTE[1] });
-    C.barChart('chPenugasan', A.assignmentCounts(rows), { color: C.PALETTE[4] });
+    C.barChart('chPenugasan', A.countBy(rows, 'div'), { color: C.PALETTE[4], horizontal: true });
     C.barChart('chAgama', A.countBy(rows, 'agama'), { color: C.PALETTE[2] });
     C.percentBar('chKelengkapan', A.completeness(rows));
     C.stackedBar('chSilang', A.crossTab(rows, 'provinsi', 'pendidikan', { rowLimit: 12 }));

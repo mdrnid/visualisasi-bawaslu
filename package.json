@@ -10,6 +10,6 @@
     "validate": "node scripts/validate-data.mjs data/personel.xlsx"
   },
   "devDependencies": {
-    "xlsx": "^0.20.2"
+    "xlsx": "^0.18.5"
   }
 }

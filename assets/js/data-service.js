@@ -27,8 +27,14 @@ function gridToRaw(grid) {
     }
 
     let ordinalSeen = 0;
-    const columnMap = grid[headerIndex].map((h) => {
-        const key = mapHeader(h);
+    const maxCols = Math.max(grid[headerIndex].length, grid[headerIndex + 1]?.length || 0);
+    const columnMap = Array.from({ length: maxCols }).map((_, c) => {
+        // Gabungkan baris header saat ini dengan baris di bawahnya untuk menangani header yang di-merge (seperti Media Sosial)
+        const h = grid[headerIndex][c];
+        const subH = grid[headerIndex + 1] && grid[headerIndex + 1][c];
+        const combinedH = [h, subH].filter(Boolean).join(' ');
+        
+        const key = mapHeader(combinedH);
         if (key === '__ORDINAL__') { ordinalSeen += 1; return ordinalSeen === 1 ? 'no' : 'noUrut'; }
         return key;
     });
