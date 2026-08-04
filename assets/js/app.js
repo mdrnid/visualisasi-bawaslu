@@ -150,22 +150,23 @@ function switchView(view) {
 
 /* ---------- Ekspor ---------- */
 
-function exportCsv(rows) {
-    const cell = (v) => {
-        const s = String(v ?? '');
-        return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-    };
-    const csv = [
-        FIELDS.map((f) => cell(f.label)).join(','),
-        ...rows.map((r) => FIELDS.map((f) => cell(r[f.key])).join(',')),
-    ].join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'personel-' + new Date().toISOString().slice(0, 10) + '.csv';
-    a.click();
-    URL.revokeObjectURL(a.href);
-    UI.toast('Berhasil mengekspor ' + rows.length + ' baris.', 'success');
+function exportExcel(rows) {
+    if (!window.XLSX) {
+        UI.toast('Pustaka XLSX belum dimuat.', 'error');
+        return;
+    }
+    const data = rows.map((r) => {
+        const obj = {};
+        FIELDS.forEach((f) => {
+            obj[f.label] = r[f.key] ?? '';
+        });
+        return obj;
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Data Personel");
+    XLSX.writeFile(wb, 'personel-' + new Date().toISOString().slice(0, 10) + '.xlsx');
+    UI.toast('Berhasil mengekspor ' + rows.length + ' baris ke Excel.', 'success');
 }
 
 /* ---------- Event binding ---------- */
@@ -176,6 +177,119 @@ function debounce(fn, ms = 200) {
         clearTimeout(t);
         t = setTimeout(() => fn(...args), ms);
     };
+}
+
+/* ---------- CRUD Logic ---------- */
+function openModal(id = null) {
+    const form = $('#dataForm');
+    form.reset();
+    $('#formRowId').value = '';
+    $('#modalTitle').textContent = id ? 'Edit Data' : 'Tambah Data';
+
+    if (id) {
+        const rec = state.all.find(r => r._id === id);
+        if (rec) {
+            $('#formRowId').value = id;
+            $('#iNama').value = rec.nama || '';
+            $('#iProvinsi').value = rec.provinsi || '';
+            $('#iKabkota').value = rec.kabkota || '';
+            $('#iGender').value = rec.gender || '';
+            $('#iAgama').value = rec.agama || '';
+            $('#iPendidikan').value = rec.pendidikan || '';
+            $('#iJabatan').value = rec.jabatan || '';
+            $('#iWakordiv').value = rec.wakordiv || '';
+            $('#iDiv').value = rec.div || '';
+            $('#iAmj').value = rec.amj || '';
+            $('#iHp').value = rec.hp || '';
+            $('#iEmailK').value = rec.emailK || '';
+            $('#iEmailP').value = rec.emailP || '';
+            $('#iAlamat').value = rec.alamat || '';
+            $('#iFacebook').value = rec.facebook || '';
+            $('#iInstagram').value = rec.instagram || '';
+            $('#iWebsite').value = rec.website || '';
+        }
+    }
+    $('#modalForm').hidden = false;
+    document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+    $('#modalForm').hidden = true;
+    document.body.style.overflow = '';
+}
+
+function saveData() {
+    const id = $('#formRowId').value;
+    const newData = {
+        nama: $('#iNama').value,
+        provinsi: $('#iProvinsi').value,
+        kabkota: $('#iKabkota').value,
+        gender: $('#iGender').value,
+        agama: $('#iAgama').value,
+        pendidikan: $('#iPendidikan').value,
+        jabatan: $('#iJabatan').value,
+        wakordiv: $('#iWakordiv').value,
+        div: $('#iDiv').value,
+        amj: $('#iAmj').value,
+        hp: $('#iHp').value,
+        emailK: $('#iEmailK').value,
+        emailP: $('#iEmailP').value,
+        alamat: $('#iAlamat').value,
+        facebook: $('#iFacebook').value,
+        instagram: $('#iInstagram').value,
+        website: $('#iWebsite').value,
+        _search: [$('#iNama').value, $('#iJabatan').value, $('#iProvinsi').value, $('#iKabkota').value].join(' ').toLowerCase()
+    };
+
+    if (id) {
+        const index = state.all.findIndex(r => r._id === id);
+        if (index !== -1) {
+            state.all[index] = { ...state.all[index], ...newData };
+        }
+        UI.toast('Data berhasil diperbarui.', 'success');
+    } else {
+        const newId = 'row-new-' + Date.now();
+        const newRecord = { 
+            _id: newId, 
+            _rowNumber: state.all.length ? Math.max(...state.all.map(r => r._rowNumber)) + 1 : 1,
+            _completeness: 80,
+            ...newData 
+        };
+        state.all.unshift(newRecord);
+        UI.toast('Data baru berhasil ditambahkan.', 'success');
+    }
+
+    closeModal();
+    render();
+    syncToServer();
+}
+
+async function syncToServer() {
+    try {
+        const rows = state.all.map((r) => {
+            const obj = {};
+            FIELDS.forEach((f) => {
+                obj[f.label] = r[f.key] ?? '';
+            });
+            return obj;
+        });
+        
+        const response = await fetch('/api/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(rows)
+        });
+        const resData = await response.json();
+        
+        if (!response.ok) {
+            UI.toast('Gagal menyimpan ke file Excel: ' + (resData.error || 'Unknown error'), 'warn');
+        } else {
+            UI.toast('Tersimpan permanen ke Excel.', 'success');
+        }
+    } catch (e) {
+        console.error(e);
+        UI.toast('Kesalahan koneksi saat menyimpan.', 'warn');
+    }
 }
 
 function bindEvents() {
@@ -208,7 +322,7 @@ function bindEvents() {
         UI.toast('Filter dikosongkan.');
     });
 
-    $('#btnExport').addEventListener('click', () => exportCsv(selectRecords()));
+    $('#btnExport').addEventListener('click', () => exportExcel(selectRecords()));
     $('#btnRefresh').addEventListener('click', () => bootstrap({ force: true }));
 
     $('#grid thead').addEventListener('click', (e) => {
@@ -245,7 +359,7 @@ function bindEvents() {
 
     const openFromEvent = (e) => {
         const card = e.target.closest('.person, tr[data-id]');
-        if (!card || e.target.closest('a')) return;
+        if (!card || e.target.closest('a') || e.target.closest('.chk-col') || e.target.closest('input[type="checkbox"]')) return;
         const rec = state.all.find((r) => r._id === card.dataset.id);
         if (rec) UI.openDrawer(rec);
     };
@@ -257,9 +371,94 @@ function bindEvents() {
 
     $('#drawer').addEventListener('click', (e) => {
         if (e.target.hasAttribute('data-close')) UI.closeDrawer();
+        
+        // Listener untuk tombol Edit di dalam drawer
+        const btnEdit = e.target.closest('#btnEditData');
+        if (btnEdit) {
+            UI.closeDrawer();
+            openModal(btnEdit.dataset.id);
+        }
     });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') UI.closeDrawer();
+        if (e.key === 'Escape') {
+            UI.closeDrawer();
+            closeModal();
+        }
+    });
+
+    $('#modalForm')?.addEventListener('click', (e) => {
+        if (e.target.hasAttribute('data-close-modal')) closeModal();
+    });
+
+    $('#dataForm')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        saveData();
+    });
+
+    // Event listener untuk Tambah Data dan Hapus Data
+    $('#btnAddData')?.addEventListener('click', () => {
+        openModal();
+    });
+
+    $('#btnDeleteMode')?.addEventListener('click', () => {
+        $('#grid').classList.add('delete-mode');
+        $('#btnAddData').hidden = true;
+        $('#btnDeleteMode').hidden = true;
+        $('#btnCancelDelete').hidden = false;
+        $('#btnConfirmDelete').hidden = false;
+    });
+
+    $('#btnCancelDelete')?.addEventListener('click', () => {
+        $('#grid').classList.remove('delete-mode');
+        $('#btnAddData').hidden = false;
+        $('#btnDeleteMode').hidden = false;
+        $('#btnCancelDelete').hidden = true;
+        $('#btnConfirmDelete').hidden = true;
+        
+        // Uncheck all when canceling
+        $$('.chk-row').forEach(c => c.checked = false);
+        const chkAll = $('#chkAll');
+        if (chkAll) chkAll.checked = false;
+    });
+
+    $('#btnConfirmDelete')?.addEventListener('click', () => {
+        const checked = $$('.chk-row:checked');
+        if (!checked.length) {
+            UI.toast('Pilih minimal satu baris data untuk dihapus.', 'warn');
+            return;
+        }
+        if (confirm('Yakin ingin menghapus ' + checked.length + ' data terpilih?')) {
+            const idsToDelete = new Set(checked.map(c => c.value));
+            state.all = state.all.filter(r => !idsToDelete.has(r._id));
+            state.table.page = 0;
+            
+            // Exit delete mode
+            $('#grid').classList.remove('delete-mode');
+            $('#btnAddData').hidden = false;
+            $('#btnDeleteMode').hidden = false;
+            $('#btnCancelDelete').hidden = true;
+            $('#btnConfirmDelete').hidden = true;
+
+            render();
+            syncToServer();
+        }
+    });
+
+    // Checkbox select all
+    $('#grid thead').addEventListener('change', (e) => {
+        if (e.target.id === 'chkAll') {
+            const isChecked = e.target.checked;
+            $$('.chk-row').forEach(c => c.checked = isChecked);
+        }
+    });
+
+    $('#grid tbody').addEventListener('change', (e) => {
+        if (e.target.classList.contains('chk-row')) {
+            const total = $$('.chk-row').length;
+            const checked = $$('.chk-row:checked').length;
+            const chkAll = $('#chkAll');
+            if (chkAll) chkAll.checked = (total > 0 && total === checked);
+        }
     });
 }
 

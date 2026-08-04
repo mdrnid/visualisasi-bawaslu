@@ -226,7 +226,12 @@ export function openDrawer(record) {
         '%</p></div></div>' +
         '<dl class="dl">' +
         rows +
-        '</dl>';
+        '</dl>' +
+        '<div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end;">' +
+        '<button class="btn btn--primary" id="btnEditData" type="button" data-id="' + esc(record._id) + '">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>' +
+        'Edit Data</button>' +
+        '</div>';
     $('#drawer').hidden = false;
     document.body.style.overflow = 'hidden';
 
@@ -269,6 +274,7 @@ export function renderTable(records, { page, pageSize, sortKey, sortDir }) {
 
     thead.innerHTML =
         '<tr>' +
+        '<th class="chk-col" style="width: 40px; text-align: center;"><input type="checkbox" id="chkAll" title="Pilih Semua"></th>' +
         FIELDS.map((f) => {
             const isSorted = sortKey === f.key;
             const sortClass = isSorted ? 'class="th-sorted"' : '';
@@ -299,6 +305,7 @@ export function renderTable(records, { page, pageSize, sortKey, sortDir }) {
                       '<tr data-id="' +
                       esc(r._id) +
                       '">' +
+                      '<td class="chk-col" style="text-align: center;" onclick="event.stopPropagation()"><input type="checkbox" class="chk-row" value="' + esc(r._id) + '"></td>' +
                       FIELDS.map((f) => {
                           const v = r[f.key];
                           const isSorted = sortKey === f.key;
@@ -375,7 +382,7 @@ export function renderTable(records, { page, pageSize, sortKey, sortDir }) {
                       '</tr>'
               )
               .join('')
-        : '<tr><td class="empty" colspan="' + FIELDS.length + '">Tidak ada baris yang cocok.</td></tr>';
+        : '<tr><td class="empty" colspan="' + (FIELDS.length + 1) + '">Tidak ada baris yang cocok.</td></tr>';
 
     const from = records.length ? start + 1 : 0;
     const to = Math.min(start + pageSize, records.length);

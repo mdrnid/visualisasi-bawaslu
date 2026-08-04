@@ -5,7 +5,7 @@
   "description": "Direktori dan dashboard analitik personel berbasis berkas Excel",
   "type": "module",
   "scripts": {
-    "dev": "npx --yes serve -l 8080 .",
+    "dev": "node server.js",
     "start": "npm run dev",
     "validate": "node scripts/validate-data.mjs data/data.xlsx",
     "test": "vitest run",
@@ -20,5 +20,8 @@
     "prettier": "^3.9.6",
     "vitest": "^4.1.10",
     "xlsx": "^0.18.5"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
   }
 }

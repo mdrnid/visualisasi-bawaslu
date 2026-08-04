@@ -26,7 +26,7 @@
     <div class="appbar__actions">
       <span class="pill" id="sourceBadge" title="Sumber data">—</span>
       <button class="btn btn--ghost" id="btnRefresh" type="button">Muat Ulang Data</button>
-      <button class="btn btn--primary" id="btnExport" type="button">Ekspor CSV</button>
+      <button class="btn btn--primary" id="btnExport" type="button">Ekspor Excel</button>
     </div>
   </div>
   <nav class="tabs" role="tablist">
@@ -128,6 +128,25 @@
   <!-- ============ TABEL ============ -->
   <section class="view" id="view-table" role="tabpanel" aria-labelledby="tab-table" data-view="table" hidden>
     <div class="panel">
+      <div class="panel__head">
+        <h2>Data Personel</h2>
+        <div class="actions" style="display: flex; gap: 8px;">
+          <button class="btn btn--primary" id="btnAddData" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Tambah Data
+          </button>
+          <button class="btn btn--danger" id="btnDeleteMode" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            Hapus Data
+          </button>
+
+          <!-- Mode Hapus -->
+          <button class="btn btn--ghost" id="btnCancelDelete" type="button" hidden>Batal</button>
+          <button class="btn btn--danger" id="btnConfirmDelete" type="button" hidden title="Konfirmasi Hapus Data">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </div>
+      </div>
       <div class="tbl-scroll"><table id="grid"><thead></thead><tbody></tbody></table></div>
       <div class="pager">
         <span class="muted" id="pagerInfo"></span>
@@ -159,6 +178,85 @@
       <button class="btn btn--icon" data-close aria-label="Tutup">×</button>
     </header>
     <div class="drawer__body" id="drawerBody"></div>
+  </aside>
+</div>
+
+<!-- Modal Form Data -->
+<div class="drawer" id="modalForm" hidden>
+  <div class="drawer__scrim" data-close-modal></div>
+  <aside class="drawer__panel" role="dialog" aria-modal="true" aria-labelledby="modalTitle" style="width: 100%; max-width: 500px; right: 0; left: auto; transform: none; height: 100vh; overflow-y: auto;">
+    <header class="drawer__head">
+      <h2 id="modalTitle">Tambah Data</h2>
+      <button class="btn btn--icon" data-close-modal aria-label="Tutup">×</button>
+    </header>
+    <div class="drawer__body" style="padding: 20px; padding-bottom: 0;">
+      <form id="dataForm" style="display: flex; flex-direction: column; gap: 14px;">
+        <input type="hidden" id="formRowId" />
+        
+        <h3 style="font-size: 13px; margin: 0; color: var(--brand); border-bottom: 1px solid var(--line); padding-bottom: 4px;">Identitas</h3>
+        <div class="field"><label for="iNama">Nama *</label><input type="text" id="iNama" required /></div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="field"><label for="iProvinsi">Provinsi *</label><input type="text" id="iProvinsi" required /></div>
+            <div class="field"><label for="iKabkota">Kab/Kota</label><input type="text" id="iKabkota" /></div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="field"><label for="iGender">Jenis Kelamin</label>
+            <select id="iGender">
+              <option value="">Pilih...</option>
+              <option value="Laki-laki">Laki-laki</option>
+              <option value="Perempuan">Perempuan</option>
+            </select>
+          </div>
+          <div class="field"><label for="iAgama">Agama</label>
+            <select id="iAgama">
+              <option value="">Pilih...</option>
+              <option value="Islam">Islam</option>
+              <option value="Kristen">Kristen</option>
+              <option value="Katolik">Katolik</option>
+              <option value="Hindu">Hindu</option>
+              <option value="Buddha">Buddha</option>
+              <option value="Konghucu">Konghucu</option>
+            </select>
+          </div>
+        </div>
+        <div class="field"><label for="iPendidikan">Pendidikan</label>
+          <select id="iPendidikan">
+            <option value="">Pilih...</option>
+            <option value="SLTA">SLTA</option>
+            <option value="Diploma">Diploma</option>
+            <option value="S1">S1</option>
+            <option value="S2">S2</option>
+            <option value="S3">S3</option>
+          </select>
+        </div>
+
+        <h3 style="font-size: 13px; margin: 10px 0 0; color: var(--brand); border-bottom: 1px solid var(--line); padding-bottom: 4px;">Jabatan</h3>
+        <div class="field"><label for="iJabatan">Jabatan</label><input type="text" id="iJabatan" /></div>
+        <div class="field"><label for="iWakordiv">Wakil Koordinator Divisi</label><input type="text" id="iWakordiv" /></div>
+        <div class="field"><label for="iDiv">Divisi</label><input type="text" id="iDiv" /></div>
+        <div class="field"><label for="iAmj">Akhir Masa Jabatan</label><input type="text" id="iAmj" placeholder="YYYY-MM-DD atau Tahun" /></div>
+
+        <h3 style="font-size: 13px; margin: 10px 0 0; color: var(--brand); border-bottom: 1px solid var(--line); padding-bottom: 4px;">Kontak & Lokasi</h3>
+        <div class="field"><label for="iHp">No HP/WA</label><input type="tel" id="iHp" /></div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="field"><label for="iEmailK">Email Kantor</label><input type="email" id="iEmailK" /></div>
+            <div class="field"><label for="iEmailP">Email Pribadi</label><input type="email" id="iEmailP" /></div>
+        </div>
+        <div class="field"><label for="iAlamat">Alamat Kantor</label><input type="text" id="iAlamat" /></div>
+
+        <h3 style="font-size: 13px; margin: 10px 0 0; color: var(--brand); border-bottom: 1px solid var(--line); padding-bottom: 4px;">Media Sosial</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="field"><label for="iFacebook">Facebook (Username)</label><input type="text" id="iFacebook" /></div>
+            <div class="field"><label for="iInstagram">Instagram (Username)</label><input type="text" id="iInstagram" /></div>
+        </div>
+        <div class="field"><label for="iWebsite">Website</label><input type="url" id="iWebsite" /></div>
+        
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; background: white; padding-bottom: 20px; z-index: 10;">
+          <button type="button" class="btn btn--ghost" data-close-modal>Batal</button>
+          <button type="submit" class="btn btn--primary">Simpan Data</button>
+        </div>
+      </form>
+    </div>
   </aside>
 </div>
 
