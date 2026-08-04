@@ -54,7 +54,7 @@ function gridToRaw(grid) {
     }
 
     const recognized = columnMap.filter(Boolean).length;
-    return { rows, meta: { headerIndex, recognized, totalColumns: grid[headerIndex].length } };
+    return { rows, meta: { headerIndex, recognized, totalColumns: maxCols } };
 }
 
 function readCache() {

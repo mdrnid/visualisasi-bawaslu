@@ -11,7 +11,7 @@ export const FIELDS = Object.freeze([
     { key: 'nama', label: 'Nama', group: 'identitas', type: 'text', required: true, searchable: true },
     { key: 'gender', label: 'Jenis Kelamin', group: 'identitas', type: 'category', facet: true },
     { key: 'jabatan', label: 'Jabatan', group: 'jabatan', type: 'category', facet: true, searchable: true },
-    { key: 'wakor', label: 'Wakor', group: 'jabatan', type: 'text' },
+    { key: 'wakordiv', label: 'Wakil Koordinator Divisi', group: 'jabatan', type: 'text' },
     { key: 'div', label: 'Divisi', group: 'jabatan', type: 'text' },
     { key: 'amj', label: 'Akhir Masa Jabatan', group: 'jabatan', type: 'category', facet: true },
     { key: 'agama', label: 'Agama', group: 'profil', type: 'category', facet: true },
@@ -52,7 +52,7 @@ const HEADER_RULES = [
     ['website', (n) => n.includes('WEBSITE') || n.includes('SITUS') || n === 'WEB'],
     ['alamat', (n) => n.includes('ALAMAT')],
     ['jabatan', (n) => n.startsWith('JABATAN')],
-    ['wakor', (n) => n.startsWith('WAKOR')],
+    ['wakordiv', (n) => n.startsWith('WAKOR')],
     ['div', (n) => n === 'DIV' || n.startsWith('DIVISI')],
     ['amj', (n) => n === 'AMJ' || n.startsWith('AKHIR MASA')],
     ['agama', (n) => n.startsWith('AGAMA')],
@@ -147,6 +147,7 @@ export function normalizeRecord(raw, index, cc = '62') {
             case 'pendidikan': rec[f.key] = normPendidikan(s); break;
             case 'agama': rec[f.key] = normAgama(s); break;
             case 'provinsi':
+            case 'kabkota':
             case 'nama': rec[f.key] = titleCase(s); break;
             case 'hp': rec[f.key] = normPhone(s, cc); break;
             case 'emailP':

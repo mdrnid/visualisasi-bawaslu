@@ -7,7 +7,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import XLSX from 'xlsx';
 
-const file = process.argv[2] || 'data/personel.xlsx';
+const file = process.argv[2] || 'data/data.xlsx';
 if (!existsSync(file)) {
     console.error('Berkas tidak ditemukan: ' + file);
     process.exit(1);

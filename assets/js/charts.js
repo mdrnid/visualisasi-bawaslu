@@ -50,7 +50,7 @@ export function percentBar(id, items) {
         type: 'bar',
         data: {
             labels: items.map((i) => i.label),
-            datasets: [{ data: items.map((i) => i.value), backgroundColor: items.map((i) => (i.value >= 80 ? '#0f9d58' : i.value >= 50 ? '#e8a33d' : '#ef4444')), borderRadius: 6 }],
+            datasets: [{ data: items.map((i) => i.value), backgroundColor: items.map((i) => (i.value >= 80 ? '#0f9d58' : i.value >= 50 ? '#e8a33d' : '#ef4444')), borderRadius: 6, maxBarThickness: 24 }],
         },
         options: {
             indexAxis: 'y', responsive: true, maintainAspectRatio: false,
@@ -84,7 +84,7 @@ export function donutChart(id, { labels, values }) {
 export function stackedBar(id, { rows, series }) {
     upsert(id, {
         type: 'bar',
-        data: { labels: rows, datasets: series.map((s, i) => ({ label: s.label, data: s.data, backgroundColor: PALETTE[i % PALETTE.length], borderRadius: 4 })) },
+        data: { labels: rows, datasets: series.map((s, i) => ({ label: s.label, data: s.data, backgroundColor: PALETTE[i % PALETTE.length], borderRadius: 4, maxBarThickness: 40 })) },
         options: {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true, pointStyle: 'circle' } } },

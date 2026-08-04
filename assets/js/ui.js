@@ -124,18 +124,47 @@ export function renderTable(records, { page, pageSize, sortKey, sortDir }) {
     const start = page * pageSize;
     const slice = records.slice(start, start + pageSize);
 
-    thead.innerHTML = '<tr>' + FIELDS.map((f) =>
-        '<th data-key="' + f.key + '" aria-sort="' + (sortKey === f.key ? (sortDir === 1 ? 'ascending' : 'descending') : 'none') + '">' +
-        esc(f.label) + (sortKey === f.key ? (sortDir === 1 ? ' ↑' : ' ↓') : '') + '</th>').join('') + '</tr>';
+    thead.innerHTML = '<tr>' + FIELDS.map((f) => {
+        const isSorted = sortKey === f.key;
+        const sortClass = isSorted ? 'class="th-sorted"' : '';
+        const sortIcon = isSorted ? (sortDir === 1 ? ' <span class="sort-icon">↑</span>' : ' <span class="sort-icon">↓</span>') : '';
+        return '<th data-key="' + f.key + '" ' + sortClass + ' aria-sort="' + (isSorted ? (sortDir === 1 ? 'ascending' : 'descending') : 'none') + '">' +
+            esc(f.label) + sortIcon + '</th>';
+    }).join('') + '</tr>';
 
     tbody.innerHTML = slice.length
         ? slice.map((r) => '<tr data-id="' + esc(r._id) + '">' + FIELDS.map((f) => {
             const v = r[f.key];
-            if (!v) return '<td class="na">—</td>';
-            if (f.key === 'hp') return '<td><a href="' + waLink(v) + '" target="_blank" rel="noopener">+' + esc(v) + '</a></td>';
-            if (f.type === 'email') return '<td><a href="mailto:' + esc(v) + '">' + esc(v) + '</a></td>';
-            if (f.key === 'website') return '<td><a href="' + esc(v) + '" target="_blank" rel="noopener">' + esc(v) + '</a></td>';
-            return '<td>' + esc(v) + '</td>';
+            const isSorted = sortKey === f.key;
+            const tdClass = (isSorted ? 'td-sorted' : '') + (f.key === 'no' || f.key === 'noUrut' ? ' text-center font-mono' : '');
+            const classAttr = tdClass ? ' class="' + tdClass.trim() + '"' : '';
+
+            if (!v) return '<td class="na-cell' + (isSorted ? ' td-sorted' : '') + '">—</td>';
+            if (f.key === 'hp') {
+                return '<td' + classAttr + '><a class="wa-chip" href="' + waLink(v) + '" target="_blank" rel="noopener">' +
+                    '<svg class="wa-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.713-1.458L0 24zm6.208-3.79c1.658.984 3.28 1.487 4.965 1.488 5.605 0 10.165-4.561 10.168-10.168.002-2.716-1.053-5.27-2.969-7.189C16.513 2.433 13.96 1.378 11.24 1.378c-5.61 0-10.167 4.56-10.17 10.169-.001 1.905.5 3.766 1.452 5.419L1.523 21.5l4.742-1.29zM17.51 14.86c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.669.149-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.568-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/></svg>' +
+                    '<span>+' + esc(v) + '</span></a></td>';
+            }
+            if (f.type === 'email') {
+                return '<td' + classAttr + '><a class="email-link" href="mailto:' + esc(v) + '">' +
+                    '<svg class="email-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>' +
+                    '<span>' + esc(v) + '</span></a></td>';
+            }
+            if (f.key === 'website') {
+                return '<td' + classAttr + '><a class="web-link" href="' + esc(v) + '" target="_blank" rel="noopener">' +
+                    '<svg class="web-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>' +
+                    '<span>' + esc(v) + '</span></a></td>';
+            }
+            if (f.key === 'gender') {
+                const cls = v === 'Laki-laki' ? 'badge-gender--male' : 'badge-gender--female';
+                return '<td' + classAttr + '><span class="badge-gender ' + cls + '">' + esc(v) + '</span></td>';
+            }
+            if (f.key === 'pendidikan') {
+                const edu = v.toLowerCase();
+                const cls = ['s1', 's2', 's3'].includes(edu) ? 'badge-edu--high' : (edu === 'slta' ? 'badge-edu--mid' : 'badge-edu--other');
+                return '<td' + classAttr + '><span class="badge-edu ' + cls + '">' + esc(v) + '</span></td>';
+            }
+            return '<td' + classAttr + '>' + esc(v) + '</td>';
         }).join('') + '</tr>').join('')
         : '<tr><td class="empty" colspan="' + FIELDS.length + '">Tidak ada baris yang cocok.</td></tr>';
 

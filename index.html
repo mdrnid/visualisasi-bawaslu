@@ -14,7 +14,9 @@
 <header class="appbar">
   <div class="appbar__inner">
     <div class="brand">
-      <div class="brand__mark" aria-hidden="true">DP</div>
+      <div class="brand__mark" aria-hidden="true">
+  <img src="/assets/image/bawaslu.png" alt="Logo" class="brand__logo">
+</div>
       <div>
         <h1 class="brand__title" id="appName">Direktori &amp; Dashboard Personel</h1>
         <p class="brand__sub" id="appOrg">Memuat sumber data…</p>
@@ -38,7 +40,7 @@
 
   <section id="stateBox" class="state" aria-live="polite">
     <div class="spinner" aria-hidden="true"></div>
-    <p id="stateText">Memuat data dari <code>data/personel.xlsx</code>…</p>
+    <p id="stateText">Memuat data dari <code>data/data.xlsx</code>…</p>
   </section>
 
   <section id="filterBar" class="panel filterbar" hidden>
@@ -47,6 +49,7 @@
       <input type="search" id="fSearch" placeholder="Nama, jabatan, email, alamat, instansi…" autocomplete="off" />
     </div>
     <div class="field"><label for="fProvinsi">Provinsi</label><select id="fProvinsi"></select></div>
+    <div class="field"><label for="fKabkota">Kab/Kota</label><select id="fKabkota"></select></div>
     <div class="field"><label for="fJabatan">Jabatan</label><select id="fJabatan"></select></div>
     <div class="field"><label for="fGender">Jenis Kelamin</label><select id="fGender"></select></div>
     <div class="field"><label for="fPendidikan">Pendidikan</label><select id="fPendidikan"></select></div>
@@ -61,10 +64,17 @@
   <section class="view" data-view="overview" hidden>
     <div class="kpi-grid" id="kpiGrid"></div>
     <div class="chart-grid">
-      <article class="panel chart chart--wide">
+      <article class="panel chart">
         <header class="panel__head"><h2>Sebaran Personel per Provinsi</h2><span class="hint" id="hintProv"></span></header>
         <div class="canvas-wrap canvas-wrap--tall"><canvas id="chProvinsi"></canvas></div>
       </article>
+      <article class="panel chart">
+        <header class="panel__head"><h2>Sebaran Personel per Kab/Kota</h2><span class="hint" id="hintKabkota"></span></header>
+        <div class="canvas-wrap canvas-wrap--tall"><canvas id="chKabkota"></canvas></div>
+      </article>
+    </div>
+
+    <div class="chart-grid" style="margin-top: 16px;">
       <article class="panel chart">
         <header class="panel__head"><h2>Komposisi Jenis Kelamin</h2></header>
         <div class="canvas-wrap"><canvas id="chGender"></canvas></div>
@@ -136,9 +146,7 @@
     <div class="panel"><div class="tbl-scroll"><table id="issueTable"><thead></thead><tbody></tbody></table></div></div>
   </section>
 
-  <footer class="foot">
-    <span id="footMeta"></span> · Data diproses sepenuhnya di peramban Anda; tidak ada pengiriman ke pihak ketiga.
-  </footer>
+
 </main>
 
 <!-- Panel detail -->

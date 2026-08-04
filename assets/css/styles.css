@@ -59,6 +59,10 @@ code {
     font-size: .9em
 }
 
+[hidden] {
+    display: none !important;
+}
+
 .sr-only {
     position: absolute;
     width: 1px;
@@ -75,6 +79,14 @@ code {
     background: #fff;
     padding: 10px 14px;
     z-index: 99
+}
+
+.brand__logo {
+    /* Ubah angka 40px ini sesuai dengan ukuran yang pas untuk desain Anda */
+    height: 42px;
+    width: auto;
+    /* Memastikan logo tidak gepeng/distorsi */
+    object-fit: contain;
 }
 
 .skip-link:focus {
@@ -596,8 +608,10 @@ select:focus {
 /* Tabel */
 .tbl-scroll {
     overflow: auto;
-    max-height: 62vh;
-    border-radius: var(--r)
+    max-height: 65vh;
+    border-radius: var(--r);
+    border: 1px solid var(--line);
+    box-shadow: var(--sh-1);
 }
 
 table {
@@ -605,43 +619,187 @@ table {
     border-spacing: 0;
     width: 100%;
     font-size: 13px;
-    white-space: nowrap
+    white-space: nowrap;
+    background: var(--surface);
 }
 
 th,
 td {
-    padding: 10px 14px;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--line);
-    text-align: left
+    text-align: left;
+    transition: background-color 0.15s ease;
+}
+
+/* Sticky first column (No) */
+table th:first-child,
+table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    border-right: 1px solid var(--line);
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.02);
+}
+
+table td:first-child {
+    background: var(--surface);
+}
+
+table th:first-child {
+    z-index: 4;
+    background: #f1f5f9;
 }
 
 thead th {
     position: sticky;
     top: 0;
     z-index: 2;
-    background: #f8fafd;
+    background: #f1f5f9;
     cursor: pointer;
     font-size: 11px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .05em;
+    letter-spacing: .06em;
     color: var(--muted);
-    user-select: none
+    user-select: none;
+    border-bottom: 2px solid var(--line);
 }
 
 thead th:hover {
-    color: var(--brand)
+    color: var(--brand);
+    background: #e2e8f0;
+}
+
+thead th.th-sorted {
+    color: var(--brand);
+    background: #e2e8f0;
+    border-bottom: 2px solid var(--brand);
 }
 
 tbody tr {
-    cursor: pointer
+    cursor: pointer;
 }
 
 tbody tr:hover {
-    background: #f7faff
+    background: #f8fafc;
 }
 
-td.na {
-    color: #c3ccdb
+tbody tr:hover td:first-child {
+    background: #f8fafc;
+}
+
+td.td-sorted {
+    background: rgba(29, 78, 216, 0.015);
+}
+
+tbody tr:hover td.td-sorted {
+    background: rgba(29, 78, 216, 0.03);
+}
+
+/* Badges and Chips */
+.badge-gender {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.badge-gender--male {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.badge-gender--female {
+    background: #fce7f3;
+    color: #be185d;
+}
+
+.badge-edu {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.badge-edu--high {
+    background: #e0e7ff;
+    color: #4338ca;
+}
+
+.badge-edu--mid {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.badge-edu--other {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.wa-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #dcfce7;
+    color: #15803d;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 12px;
+    border: 1px solid #bbf7d0;
+    transition: all 0.15s ease;
+}
+
+.wa-chip:hover {
+    background: #bbf7d0;
+    transform: translateY(-1px);
+    text-decoration: none;
+}
+
+.wa-icon {
+    flex-shrink: 0;
+}
+
+.email-link,
+.web-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--brand);
+    font-weight: 500;
+    transition: color 0.15s ease;
+}
+
+.email-link:hover,
+.web-link:hover {
+    color: var(--brand-ink);
+    text-decoration: underline;
+}
+
+.email-icon,
+.web-icon {
+    flex-shrink: 0;
+}
+
+.na-cell {
+    color: #94a3b8;
+    font-style: italic;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.font-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.sort-icon {
+    font-size: 12px;
+    color: var(--brand);
+    font-weight: bold;
 }
 
 .pager {

@@ -10,6 +10,7 @@ const { $, $$ } = UI;
 
 const FACETS = [
     { id: 'fProvinsi', key: 'provinsi', all: 'Semua Provinsi' },
+    { id: 'fKabkota', key: 'kabkota', all: 'Semua Kab/Kota' },
     { id: 'fJabatan', key: 'jabatan', all: 'Semua Jabatan' },
     { id: 'fGender', key: 'gender', all: 'Semua' },
     { id: 'fPendidikan', key: 'pendidikan', all: 'Semua Jenjang' },
@@ -18,7 +19,7 @@ const FACETS = [
 
 const state = {
     all: [], issues: [], meta: null,
-    filters: { q: '', provinsi: '', jabatan: '', gender: '', pendidikan: '', agama: '' },
+    filters: { q: '', provinsi: '', kabkota: '', jabatan: '', gender: '', pendidikan: '', agama: '' },
     view: 'overview',
     table: { page: 0, pageSize: APP_CONFIG.ui.tablePageSize, sortKey: 'nama', sortDir: 1 },
     dir: { shown: APP_CONFIG.ui.directoryPageSize, sort: 'nama' },
@@ -47,6 +48,7 @@ function selectRecords() {
     const q = f.q.trim().toLowerCase();
     let rows = state.all.filter((r) =>
         (!f.provinsi || r.provinsi === f.provinsi) &&
+        (!f.kabkota || r.kabkota === f.kabkota) &&
         (!f.jabatan || r.jabatan === f.jabatan) &&
         (!f.gender || r.gender === f.gender) &&
         (!f.pendidikan || r.pendidikan === f.pendidikan) &&
@@ -85,6 +87,11 @@ function render() {
     const prov = A.countBy(rows, 'provinsi');
     $('#hintProv').textContent = prov.labels.length + ' provinsi';
     C.barChart('chProvinsi', prov, { horizontal: prov.labels.length > 7 });
+
+    const kabkota = A.countBy(rows, 'kabkota');
+    $('#hintKabkota').textContent = kabkota.labels.length + ' kab/kota';
+    C.barChart('chKabkota', kabkota, { horizontal: kabkota.labels.length > 7 });
+
     C.donutChart('chGender', A.countBy(rows, 'gender'));
     C.donutChart('chPendidikan', A.countBy(rows, 'pendidikan', { sort: 'label' }));
     C.barChart('chJabatan', A.countBy(rows, 'jabatan', { limit: APP_CONFIG.ui.topJabatan }), { horizontal: true, color: C.PALETTE[1] });
@@ -217,8 +224,6 @@ async function bootstrap({ force = false } = {}) {
         $('#appName').textContent = APP_CONFIG.appName;
         $('#appOrg').textContent = APP_CONFIG.orgName;
         $('#sourceBadge').textContent = meta.sheetName + ' · ' + meta.rowCount + ' baris' + (fromCache ? ' (cache)' : '');
-        $('#footMeta').textContent = 'Sumber: ' + meta.sourceUrl +
-            ' · dimuat ' + new Date(meta.loadedAt).toLocaleString(APP_CONFIG.ui.locale);
 
         UI.showState('hidden');
         $('#filterBar').hidden = false;

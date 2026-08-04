@@ -11,7 +11,7 @@ export const APP_CONFIG = {
     
     cache: {
         enabled: true,
-        key: 'bawaslu-personel-cache-v3',
+        key: 'bawaslu-personel-cache-v4',
         ttlMinutes: 15
     },
     
