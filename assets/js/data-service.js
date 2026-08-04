@@ -3,10 +3,14 @@
  * memvalidasi, dan menyimpan cache. Tidak ada satu pun operasi DOM di sini.
  */
 import { APP_CONFIG } from './config.js';
-import { FIELDS, mapHeader, headerScore, normalizeRecord, validateRecord, findDuplicates } from './schema.js';
+import { mapHeader, headerScore, normalizeRecord, validateRecord, findDuplicates } from './schema.js';
 
 class DataError extends Error {
-    constructor(message, hint) { super(message); this.name = 'DataError'; this.hint = hint; }
+    constructor(message, hint) {
+        super(message);
+        this.name = 'DataError';
+        this.hint = hint;
+    }
 }
 
 /** Ubah matriks sel menjadi objek mentah berdasarkan baris header terbaik. */
@@ -14,10 +18,14 @@ function gridToRaw(grid) {
     if (!grid.length) throw new DataError('Sheet kosong.', 'Pastikan sheet pertama berisi data.');
 
     const scanTo = Math.min(grid.length, APP_CONFIG.dataSource.headerScanRows);
-    let headerIndex = 0, bestScore = -1;
+    let headerIndex = 0,
+        bestScore = -1;
     for (let i = 0; i < scanTo; i += 1) {
         const score = headerScore(grid[i]);
-        if (score > bestScore) { bestScore = score; headerIndex = i; }
+        if (score > bestScore) {
+            bestScore = score;
+            headerIndex = i;
+        }
     }
     if (bestScore < 3) {
         throw new DataError(
@@ -33,9 +41,12 @@ function gridToRaw(grid) {
         const h = grid[headerIndex][c];
         const subH = grid[headerIndex + 1] && grid[headerIndex + 1][c];
         const combinedH = [h, subH].filter(Boolean).join(' ');
-        
+
         const key = mapHeader(combinedH);
-        if (key === '__ORDINAL__') { ordinalSeen += 1; return ordinalSeen === 1 ? 'no' : 'noUrut'; }
+        if (key === '__ORDINAL__') {
+            ordinalSeen += 1;
+            return ordinalSeen === 1 ? 'no' : 'noUrut';
+        }
         return key;
     });
 
@@ -60,19 +71,29 @@ function gridToRaw(grid) {
 function readCache() {
     if (!APP_CONFIG.cache.enabled) return null;
     try {
-        const blob = JSON.parse(localStorage.getItem(APP_CONFIG.cache.key) || 'null');
+        const raw = sessionStorage.getItem(APP_CONFIG.cache.key);
+        if (!raw) return null;
+        // Obfuscate to prevent casual scraping of PII from console/extensions
+        const decoded = decodeURIComponent(escape(atob(raw)));
+        const blob = JSON.parse(decoded);
         if (!blob) return null;
         const ageMin = (Date.now() - blob.cachedAt) / 60000;
         if (ageMin > APP_CONFIG.cache.ttlMinutes) return null;
         return blob;
-    } catch { return null; }
+    } catch {
+        return null;
+    }
 }
 
 function writeCache(payload) {
     if (!APP_CONFIG.cache.enabled) return;
     try {
-        localStorage.setItem(APP_CONFIG.cache.key, JSON.stringify({ ...payload, cachedAt: Date.now() }));
-    } catch { /* kuota penuh: abaikan, cache hanya optimasi */ }
+        const dataStr = JSON.stringify({ ...payload, cachedAt: Date.now() });
+        const encoded = btoa(unescape(encodeURIComponent(dataStr)));
+        sessionStorage.setItem(APP_CONFIG.cache.key, encoded);
+    } catch {
+        /* session storage quota full or blocked */
+    }
 }
 
 /**
@@ -89,7 +110,7 @@ export async function loadDataset({ force = false } = {}) {
     let response;
     try {
         response = await fetch(url, { cache: force ? 'reload' : 'default' });
-    } catch (err) {
+    } catch {
         throw new DataError(
             'Tidak dapat mengambil berkas data.',
             'Halaman ini harus dijalankan lewat HTTP server (mis. "npx serve"), bukan dibuka langsung dari file://.'
@@ -104,9 +125,10 @@ export async function loadDataset({ force = false } = {}) {
 
     const buffer = await response.arrayBuffer();
     const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
-    const sheetName = typeof APP_CONFIG.dataSource.sheet === 'number'
-        ? workbook.SheetNames[APP_CONFIG.dataSource.sheet]
-        : APP_CONFIG.dataSource.sheet;
+    const sheetName =
+        typeof APP_CONFIG.dataSource.sheet === 'number'
+            ? workbook.SheetNames[APP_CONFIG.dataSource.sheet]
+            : APP_CONFIG.dataSource.sheet;
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) throw new DataError('Sheet "' + sheetName + '" tidak ada.', 'Periksa dataSource.sheet di config.js.');
 

@@ -25,18 +25,25 @@ export const FIELDS = Object.freeze([
     { key: 'website', label: 'Website', group: 'medsos', type: 'url' },
 ]);
 
-export const FIELD_BY_KEY = Object.freeze(
-    Object.fromEntries(FIELDS.map((f) => [f.key, f]))
-);
+export const FIELD_BY_KEY = Object.freeze(Object.fromEntries(FIELDS.map((f) => [f.key, f])));
 
 /** Atribut yang dihitung dalam skor kelengkapan profil. */
 export const COMPLETENESS_KEYS = Object.freeze([
-    'hp', 'emailP', 'emailK', 'alamat', 'facebook', 'instagram', 'website',
+    'hp',
+    'emailP',
+    'emailK',
+    'alamat',
+    'facebook',
+    'instagram',
+    'website',
 ]);
 
 /* ---------- Pengenalan header ---------- */
 
-const slug = (v) => String(v ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const slug = (v) =>
+    String(v ?? '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
 
 /** Urutan penting: pola paling spesifik didahulukan. */
 const HEADER_RULES = [
@@ -75,23 +82,26 @@ export function headerScore(row) {
 
 /* ---------- Normalisasi nilai ---------- */
 
-const titleCase = (s) =>
-    s.toLowerCase().replace(/(^|[\s./-])([a-z\u00e0-\u00ff])/g, (m, p, c) => p + c.toUpperCase());
+const titleCase = (s) => s.toLowerCase().replace(/(^|[\s./-])([a-z\u00e0-\u00ff])/g, (m, p, c) => p + c.toUpperCase());
 
 export const isBlank = (v) => {
-    const s = String(v ?? '').trim().toLowerCase();
+    const s = String(v ?? '')
+        .trim()
+        .toLowerCase();
     return s === '' || s === '-' || s === '--' || s === 'n/a' || s === 'na' || s === 'tidak ada' || s === 'null';
 };
 
-function normGender(v) {
+export function normGender(v) {
     const n = slug(v);
     if (!n) return '';
-    if (n.startsWith('L') || n.startsWith('PRIA') || n === 'M' || n === 'MALE') return 'Laki-laki';
-    if (n.startsWith('P') || n.startsWith('W') || n === 'F' || n === 'FEMALE') return 'Perempuan';
+    const MALE = ['LAKILAKI', 'PRIA', 'MALE'];
+    const FEMALE = ['PEREMPUAN', 'WANITA', 'FEMALE'];
+    if (MALE.includes(n) || n === 'L' || n === 'M' || n === 'LK') return 'Laki-laki';
+    if (FEMALE.includes(n) || n === 'P' || n === 'W' || n === 'F' || n === 'PR') return 'Perempuan';
     return titleCase(String(v).trim());
 }
 
-function normPendidikan(v) {
+export function normPendidikan(v) {
     const n = slug(v);
     if (!n) return '';
     if (n.includes('S3') || n.includes('DOKTOR')) return 'S3';
@@ -102,12 +112,20 @@ function normPendidikan(v) {
     return String(v).trim().toUpperCase();
 }
 
-function normAgama(v) {
+export function normAgama(v) {
     const n = slug(v);
     const map = {
-        ISLAM: 'Islam', MUSLIM: 'Islam', KRISTEN: 'Kristen', PROTESTAN: 'Kristen',
-        KATOLIK: 'Katolik', KHATOLIK: 'Katolik', HINDU: 'Hindu', BUDDHA: 'Buddha', BUDHA: 'Buddha',
-        KONGHUCU: 'Konghucu', KHONGHUCU: 'Konghucu'
+        ISLAM: 'Islam',
+        MUSLIM: 'Islam',
+        KRISTEN: 'Kristen',
+        PROTESTAN: 'Kristen',
+        KATOLIK: 'Katolik',
+        KHATOLIK: 'Katolik',
+        HINDU: 'Hindu',
+        BUDDHA: 'Buddha',
+        BUDHA: 'Buddha',
+        KONGHUCU: 'Konghucu',
+        KHONGHUCU: 'Konghucu',
     };
     return map[n] || (v ? titleCase(String(v).trim()) : '');
 }
@@ -140,28 +158,50 @@ export function normalizeRecord(raw, index, cc = '62') {
     const rec = { _id: 'row-' + (index + 1), _rowNumber: raw.__row ?? index + 2 };
     for (const f of FIELDS) {
         const v = raw[f.key];
-        if (isBlank(v)) { rec[f.key] = ''; continue; }
+        if (isBlank(v)) {
+            rec[f.key] = '';
+            continue;
+        }
         const s = String(v).trim().replace(/\s+/g, ' ');
         switch (f.key) {
-            case 'gender': rec[f.key] = normGender(s); break;
-            case 'pendidikan': rec[f.key] = normPendidikan(s); break;
-            case 'agama': rec[f.key] = normAgama(s); break;
+            case 'gender':
+                rec[f.key] = normGender(s);
+                break;
+            case 'pendidikan':
+                rec[f.key] = normPendidikan(s);
+                break;
+            case 'agama':
+                rec[f.key] = normAgama(s);
+                break;
             case 'provinsi':
             case 'kabkota':
-            case 'nama': rec[f.key] = titleCase(s); break;
-            case 'hp': rec[f.key] = normPhone(s, cc); break;
+            case 'nama':
+                rec[f.key] = titleCase(s);
+                break;
+            case 'hp':
+                rec[f.key] = normPhone(s, cc);
+                break;
             case 'emailP':
-            case 'emailK': rec[f.key] = s.toLowerCase(); break;
+            case 'emailK':
+                rec[f.key] = s.toLowerCase();
+                break;
             case 'facebook':
-            case 'instagram': rec[f.key] = normHandle(s); break;
-            case 'website': rec[f.key] = normUrl(s); break;
-            default: rec[f.key] = s;
+            case 'instagram':
+                rec[f.key] = normHandle(s);
+                break;
+            case 'website':
+                rec[f.key] = normUrl(s);
+                break;
+            default:
+                rec[f.key] = s;
         }
     }
     const filled = COMPLETENESS_KEYS.filter((k) => rec[k]).length;
     rec._completeness = Math.round((filled / COMPLETENESS_KEYS.length) * 100);
     rec._search = FIELDS.filter((f) => f.searchable)
-        .map((f) => rec[f.key]).join(' ').toLowerCase();
+        .map((f) => rec[f.key])
+        .join(' ')
+        .toLowerCase();
     return rec;
 }
 
@@ -179,7 +219,8 @@ export function validateRecord(rec) {
         if (f.required && !rec[f.key]) push('error', f.label, 'Wajib diisi tetapi kosong');
     }
     for (const k of ['emailP', 'emailK']) {
-        if (rec[k] && !EMAIL_RE.test(rec[k])) push('error', FIELD_BY_KEY[k].label, 'Format e-mail tidak valid: ' + rec[k]);
+        if (rec[k] && !EMAIL_RE.test(rec[k]))
+            push('error', FIELD_BY_KEY[k].label, 'Format e-mail tidak valid: ' + rec[k]);
     }
     if (rec.hp && (rec.hp.length < 10 || rec.hp.length > 15)) {
         push('warning', 'Nomor HP/WhatsApp', 'Panjang nomor tidak wajar: ' + rec.hp);
@@ -201,7 +242,9 @@ export function findDuplicates(records) {
             if (!v) continue;
             if (seen.has(v)) {
                 issues.push({
-                    rowNumber: r._rowNumber, nama: r.nama || '(tanpa nama)', severity: 'warning',
+                    rowNumber: r._rowNumber,
+                    nama: r.nama || '(tanpa nama)',
+                    severity: 'warning',
                     field: FIELD_BY_KEY[key].label,
                     message: 'Duplikat dengan baris ' + seen.get(v) + ': ' + v,
                 });

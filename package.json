@@ -7,9 +7,18 @@
   "scripts": {
     "dev": "npx --yes serve -l 8080 .",
     "start": "npm run dev",
-    "validate": "node scripts/validate-data.mjs data/personel.xlsx"
+    "validate": "node scripts/validate-data.mjs data/data.xlsx",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint assets/js scripts",
+    "format": "prettier --write \"assets/js/**/*.js\" \"scripts/**/*.mjs\" \"tests/**/*.js\""
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.8.0",
+    "prettier": "^3.9.6",
+    "vitest": "^4.1.10",
     "xlsx": "^0.18.5"
   }
 }

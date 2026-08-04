@@ -18,7 +18,9 @@ const FACETS = [
 ];
 
 const state = {
-    all: [], issues: [], meta: null,
+    all: [],
+    issues: [],
+    meta: null,
     filters: { q: '', provinsi: '', kabkota: '', jabatan: '', gender: '', pendidikan: '', agama: '' },
     view: 'overview',
     table: { page: 0, pageSize: APP_CONFIG.ui.tablePageSize, sortKey: 'nama', sortDir: 1 },
@@ -43,25 +45,35 @@ function writeUrl() {
 
 /* ---------- Seleksi data ---------- */
 
+let _lastFilterKey = '',
+    _lastResult = [];
 function selectRecords() {
     const f = state.filters;
-    const q = f.q.trim().toLowerCase();
-    let rows = state.all.filter((r) =>
-        (!f.provinsi || r.provinsi === f.provinsi) &&
-        (!f.kabkota || r.kabkota === f.kabkota) &&
-        (!f.jabatan || r.jabatan === f.jabatan) &&
-        (!f.gender || r.gender === f.gender) &&
-        (!f.pendidikan || r.pendidikan === f.pendidikan) &&
-        (!f.agama || r.agama === f.agama) &&
-        (!q || r._search.includes(q))
-    );
     const { sortKey, sortDir } = state.table;
+    const key = JSON.stringify(f) + '|' + sortKey + '|' + sortDir + '|' + state.all.length;
+    if (key === _lastFilterKey) return _lastResult;
+    _lastFilterKey = key;
+
+    const q = f.q.trim().toLowerCase();
+    let rows = state.all.filter(
+        (r) =>
+            (!f.provinsi || r.provinsi === f.provinsi) &&
+            (!f.kabkota || r.kabkota === f.kabkota) &&
+            (!f.jabatan || r.jabatan === f.jabatan) &&
+            (!f.gender || r.gender === f.gender) &&
+            (!f.pendidikan || r.pendidikan === f.pendidikan) &&
+            (!f.agama || r.agama === f.agama) &&
+            (!q || r._search.includes(q))
+    );
     rows = rows.slice().sort((a, b) => {
-        const x = a[sortKey] ?? '', y = b[sortKey] ?? '';
-        const nx = Number(x), ny = Number(y);
+        const x = a[sortKey] ?? '',
+            y = b[sortKey] ?? '';
+        const nx = Number(x),
+            ny = Number(y);
         if (x !== '' && y !== '' && !Number.isNaN(nx) && !Number.isNaN(ny)) return (nx - ny) * sortDir;
         return String(x).localeCompare(String(y), 'id') * sortDir;
     });
+    _lastResult = rows;
     return rows;
 }
 
@@ -77,38 +89,52 @@ function render() {
     const rows = selectRecords();
 
     FACETS.forEach(({ id, key, all }) => {
-        const values = [...new Set(state.all.map((r) => r[key]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id'));
+        const values = [...new Set(state.all.map((r) => r[key]).filter(Boolean))].sort((a, b) =>
+            a.localeCompare(b, 'id')
+        );
         UI.fillFacet($('#' + id), values, state.filters[key], all);
     });
     $('#fSearch').value = state.filters.q;
 
-    UI.renderKpis(A.kpis(rows, state.all));
+    if (state.view === 'overview') {
+        UI.renderKpis(A.kpis(rows, state.all));
 
-    const prov = A.countBy(rows, 'provinsi');
-    $('#hintProv').textContent = prov.labels.length + ' provinsi';
-    C.barChart('chProvinsi', prov, { horizontal: prov.labels.length > 7 });
+        const prov = A.countBy(rows, 'provinsi');
+        $('#hintProv').textContent = prov.labels.length + ' provinsi';
+        C.barChart('chProvinsi', prov, { horizontal: prov.labels.length > 7 });
 
-    const kabkota = A.countBy(rows, 'kabkota');
-    $('#hintKabkota').textContent = kabkota.labels.length + ' kab/kota';
-    C.barChart('chKabkota', kabkota, { horizontal: kabkota.labels.length > 7 });
+        const kabkota = A.countBy(rows, 'kabkota');
+        $('#hintKabkota').textContent = kabkota.labels.length + ' kab/kota';
+        C.barChart('chKabkota', kabkota, { horizontal: kabkota.labels.length > 7 });
 
-    C.donutChart('chGender', A.countBy(rows, 'gender'));
-    C.donutChart('chPendidikan', A.countBy(rows, 'pendidikan', { sort: 'label' }));
-    C.barChart('chJabatan', A.countBy(rows, 'jabatan', { limit: APP_CONFIG.ui.topJabatan }), { horizontal: true, color: C.PALETTE[1] });
-    C.barChart('chPenugasan', A.countBy(rows, 'div'), { color: C.PALETTE[4], horizontal: true });
-    C.barChart('chAgama', A.countBy(rows, 'agama'), { color: C.PALETTE[2] });
-    C.percentBar('chKelengkapan', A.completeness(rows));
-    C.stackedBar('chSilang', A.crossTab(rows, 'provinsi', 'pendidikan', { rowLimit: 12 }));
+        C.donutChart('chGender', A.countBy(rows, 'gender'));
+        C.donutChart('chPendidikan', A.countBy(rows, 'pendidikan', { sort: 'label' }));
+        C.barChart('chJabatan', A.countBy(rows, 'jabatan', { limit: APP_CONFIG.ui.topJabatan }), {
+            horizontal: true,
+            color: C.PALETTE[1],
+        });
+        C.barChart('chPenugasan', A.countBy(rows, 'div'), { color: C.PALETTE[4], horizontal: true });
+        C.barChart('chAgama', A.countBy(rows, 'agama'), { color: C.PALETTE[2] });
+        C.percentBar('chKelengkapan', A.completeness(rows));
+        C.stackedBar('chSilang', A.crossTab(rows, 'provinsi', 'pendidikan', { rowLimit: 12 }));
+    } else if (state.view === 'directory') {
+        $('#dirCount').textContent = '(' + rows.length + ' orang)';
+        UI.renderDirectory(sortForDirectory(rows), state.dir.shown);
+        $('#btnMore').hidden = state.dir.shown >= rows.length;
+    } else if (state.view === 'table') {
+        const maxPage = Math.max(0, Math.ceil(rows.length / state.table.pageSize) - 1);
+        state.table.page = Math.min(state.table.page, maxPage);
+        UI.renderTable(rows, state.table);
+    } else if (state.view === 'quality') {
+        UI.renderQuality(state.issues, state.meta);
+    }
 
-    $('#dirCount').textContent = '(' + rows.length + ' orang)';
-    UI.renderDirectory(sortForDirectory(rows), state.dir.shown);
-    $('#btnMore').hidden = state.dir.shown >= rows.length;
+    // Update tab visual status for accessibility
+    $$('.tab').forEach((t) => {
+        const isCurrent = t.dataset.view === state.view;
+        t.setAttribute('aria-selected', isCurrent ? 'true' : 'false');
+    });
 
-    const maxPage = Math.max(0, Math.ceil(rows.length / state.table.pageSize) - 1);
-    state.table.page = Math.min(state.table.page, maxPage);
-    UI.renderTable(rows, state.table);
-
-    UI.renderQuality(state.issues, state.meta);
     writeUrl();
     return rows;
 }
@@ -116,8 +142,10 @@ function render() {
 function switchView(view) {
     state.view = view;
     $$('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.view === view));
-    $$('.view').forEach((s) => { s.hidden = s.dataset.view !== view; });
-    writeUrl();
+    $$('.view').forEach((s) => {
+        s.hidden = s.dataset.view !== view;
+    });
+    render();
 }
 
 /* ---------- Ekspor ---------- */
@@ -143,18 +171,25 @@ function exportCsv(rows) {
 /* ---------- Event binding ---------- */
 
 function debounce(fn, ms = 200) {
-    let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+    let t;
+    return (...args) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn(...args), ms);
+    };
 }
 
 function bindEvents() {
     $$('.tab').forEach((tab) => tab.addEventListener('click', () => switchView(tab.dataset.view)));
 
-    $('#fSearch').addEventListener('input', debounce((e) => {
-        state.filters.q = e.target.value;
-        state.table.page = 0;
-        state.dir.shown = APP_CONFIG.ui.directoryPageSize;
-        render();
-    }, 220));
+    $('#fSearch').addEventListener(
+        'input',
+        debounce((e) => {
+            state.filters.q = e.target.value;
+            state.table.page = 0;
+            state.dir.shown = APP_CONFIG.ui.directoryPageSize;
+            render();
+        }, 220)
+    );
 
     FACETS.forEach(({ id, key }) => {
         $('#' + id).addEventListener('change', (e) => {
@@ -165,7 +200,9 @@ function bindEvents() {
     });
 
     $('#btnReset').addEventListener('click', () => {
-        Object.keys(state.filters).forEach((k) => { state.filters[k] = ''; });
+        Object.keys(state.filters).forEach((k) => {
+            state.filters[k] = '';
+        });
         state.table.page = 0;
         render();
         UI.toast('Filter dikosongkan.');
@@ -183,15 +220,24 @@ function bindEvents() {
         render();
     });
 
-    $('#prevPage').addEventListener('click', () => { state.table.page -= 1; render(); });
-    $('#nextPage').addEventListener('click', () => { state.table.page += 1; render(); });
+    $('#prevPage').addEventListener('click', () => {
+        state.table.page -= 1;
+        render();
+    });
+    $('#nextPage').addEventListener('click', () => {
+        state.table.page += 1;
+        render();
+    });
     $('#pageSize').addEventListener('change', (e) => {
         state.table.pageSize = Number(e.target.value);
         state.table.page = 0;
         render();
     });
 
-    $('#dirSort').addEventListener('change', (e) => { state.dir.sort = e.target.value; render(); });
+    $('#dirSort').addEventListener('change', (e) => {
+        state.dir.sort = e.target.value;
+        render();
+    });
     $('#btnMore').addEventListener('click', () => {
         state.dir.shown += APP_CONFIG.ui.directoryPageSize;
         render();
@@ -204,17 +250,26 @@ function bindEvents() {
         if (rec) UI.openDrawer(rec);
     };
     $('#dirGrid').addEventListener('click', openFromEvent);
-    $('#dirGrid').addEventListener('keydown', (e) => { if (e.key === 'Enter') openFromEvent(e); });
+    $('#dirGrid').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') openFromEvent(e);
+    });
     $('#grid tbody').addEventListener('click', openFromEvent);
 
-    $('#drawer').addEventListener('click', (e) => { if (e.target.hasAttribute('data-close')) UI.closeDrawer(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') UI.closeDrawer(); });
+    $('#drawer').addEventListener('click', (e) => {
+        if (e.target.hasAttribute('data-close')) UI.closeDrawer();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') UI.closeDrawer();
+    });
 }
 
 /* ---------- Bootstrap ---------- */
 
 async function bootstrap({ force = false } = {}) {
-    UI.showState('loading', force ? 'Mengambil versi terbaru berkas data…' : 'Memuat data dari ' + APP_CONFIG.dataSource.url + ' …');
+    UI.showState(
+        'loading',
+        force ? 'Mengambil versi terbaru berkas data…' : 'Memuat data dari ' + APP_CONFIG.dataSource.url + ' …'
+    );
     try {
         const { records, issues, meta, fromCache } = await loadDataset({ force });
         state.all = records;
@@ -223,7 +278,8 @@ async function bootstrap({ force = false } = {}) {
 
         $('#appName').textContent = APP_CONFIG.appName;
         $('#appOrg').textContent = APP_CONFIG.orgName;
-        $('#sourceBadge').textContent = meta.sheetName + ' · ' + meta.rowCount + ' baris' + (fromCache ? ' (cache)' : '');
+        $('#sourceBadge').textContent =
+            meta.sheetName + ' · ' + meta.rowCount + ' baris' + (fromCache ? ' (cache)' : '');
 
         UI.showState('hidden');
         $('#filterBar').hidden = false;
@@ -243,8 +299,11 @@ async function bootstrap({ force = false } = {}) {
 
 function start() {
     if (!window.XLSX || !window.Chart) {
-        UI.showState('error', 'Pustaka pihak ketiga gagal dimuat.',
-            'Periksa koneksi internet, atau unduh chart.umd.min.js dan xlsx.full.min.js ke folder assets/vendor lalu ubah tautannya di index.html.');
+        UI.showState(
+            'error',
+            'Pustaka pihak ketiga gagal dimuat.',
+            'Periksa koneksi internet, atau unduh chart.umd.min.js dan xlsx.full.min.js ke folder assets/vendor lalu ubah tautannya di index.html.'
+        );
         return;
     }
     C.applyDefaults();

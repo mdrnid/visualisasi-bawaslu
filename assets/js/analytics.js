@@ -9,9 +9,11 @@ export function countBy(records, key, { limit = 0, sort = 'desc' } = {}) {
         map.set(v, (map.get(v) || 0) + 1);
     }
     let entries = [...map.entries()];
-    entries.sort(sort === 'label'
-        ? (a, b) => a[0].localeCompare(b[0], 'id')
-        : (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'id'));
+    entries.sort(
+        sort === 'label'
+            ? (a, b) => a[0].localeCompare(b[0], 'id')
+            : (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'id')
+    );
     if (limit > 0 && entries.length > limit) {
         const head = entries.slice(0, limit);
         const rest = entries.slice(limit).reduce((s, e) => s + e[1], 0);
@@ -29,16 +31,37 @@ export function completeness(records) {
     }));
 }
 
-
-
 /** Tabulasi silang untuk grafik bertumpuk. */
 export function crossTab(records, rowKey, colKey, { rowLimit = 10 } = {}) {
     const rowTotals = countBy(records, rowKey);
     const rows = rowTotals.labels.slice(0, rowLimit);
+    const rowSet = new Set(rows);
     const cols = [...new Set(records.map((r) => r[colKey]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'id'));
+
+    // Single-pass accumulation matrix
+    const matrix = new Map();
+    for (const r of rows) {
+        const colMap = new Map();
+        for (const c of cols) {
+            colMap.set(c, 0);
+        }
+        matrix.set(r, colMap);
+    }
+
+    for (const r of records) {
+        const rv = r[rowKey];
+        const cv = r[colKey];
+        if (rv && cv && rowSet.has(rv)) {
+            const colMap = matrix.get(rv);
+            if (colMap.has(cv)) {
+                colMap.set(cv, colMap.get(cv) + 1);
+            }
+        }
+    }
+
     const series = cols.map((c) => ({
         label: c,
-        data: rows.map((rv) => records.filter((r) => r[rowKey] === rv && r[colKey] === c).length),
+        data: rows.map((rv) => matrix.get(rv).get(c) || 0),
     }));
     return { rows, series };
 }
@@ -49,9 +72,7 @@ export function kpis(records, allRecords) {
     const female = records.filter((r) => r.gender === 'Perempuan').length;
     const provinsi = new Set(records.map((r) => r.provinsi).filter(Boolean)).size;
     const pasca = records.filter((r) => r.pendidikan === 'S2' || r.pendidikan === 'S3').length;
-    const avgComplete = total
-        ? Math.round(records.reduce((s, r) => s + r._completeness, 0) / total)
-        : 0;
+    const avgComplete = total ? Math.round(records.reduce((s, r) => s + r._completeness, 0) / total) : 0;
     const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
 
     return [

@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="description" content="Direktori dan dashboard analitik personel" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self';" />
 <title>Direktori &amp; Dashboard Personel</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" />
 <link rel="stylesheet" href="./assets/css/styles.css" />
@@ -29,10 +30,10 @@
     </div>
   </div>
   <nav class="tabs" role="tablist">
-    <button class="tab is-active" role="tab" data-view="overview">Ringkasan</button>
-    <button class="tab" role="tab" data-view="directory">Direktori</button>
-    <button class="tab" role="tab" data-view="table">Tabel Data</button>
-    <button class="tab" role="tab" data-view="quality">Kualitas Data <span class="badge" id="qualityBadge" hidden>0</span></button>
+    <button class="tab is-active" role="tab" id="tab-overview" aria-controls="view-overview" aria-selected="true" data-view="overview">Ringkasan</button>
+    <button class="tab" role="tab" id="tab-directory" aria-controls="view-directory" aria-selected="false" data-view="directory">Direktori</button>
+    <button class="tab" role="tab" id="tab-table" aria-controls="view-table" aria-selected="false" data-view="table">Tabel Data</button>
+    <button class="tab" role="tab" id="tab-quality" aria-controls="view-quality" aria-selected="false" data-view="quality">Kualitas Data <span class="badge" id="qualityBadge" hidden>0</span></button>
   </nav>
 </header>
 
@@ -61,53 +62,53 @@
   </section>
 
   <!-- ============ RINGKASAN ============ -->
-  <section class="view" data-view="overview" hidden>
+  <section class="view" id="view-overview" role="tabpanel" aria-labelledby="tab-overview" data-view="overview" hidden>
     <div class="kpi-grid" id="kpiGrid"></div>
     <div class="chart-grid">
       <article class="panel chart">
         <header class="panel__head"><h2>Sebaran Personel per Provinsi</h2><span class="hint" id="hintProv"></span></header>
-        <div class="canvas-wrap canvas-wrap--tall"><canvas id="chProvinsi"></canvas></div>
+        <div class="canvas-wrap canvas-wrap--tall"><canvas id="chProvinsi" aria-label="Grafik sebaran personel per provinsi"></canvas></div>
       </article>
       <article class="panel chart">
         <header class="panel__head"><h2>Sebaran Personel per Kab/Kota</h2><span class="hint" id="hintKabkota"></span></header>
-        <div class="canvas-wrap canvas-wrap--tall"><canvas id="chKabkota"></canvas></div>
+        <div class="canvas-wrap canvas-wrap--tall"><canvas id="chKabkota" aria-label="Grafik sebaran personel per kabupaten atau kota"></canvas></div>
       </article>
     </div>
 
     <div class="chart-grid" style="margin-top: 16px;">
       <article class="panel chart">
         <header class="panel__head"><h2>Komposisi Jenis Kelamin</h2></header>
-        <div class="canvas-wrap"><canvas id="chGender"></canvas></div>
+        <div class="canvas-wrap"><canvas id="chGender" aria-label="Grafik komposisi jenis kelamin"></canvas></div>
       </article>
       <article class="panel chart">
         <header class="panel__head"><h2>Jenjang Pendidikan</h2></header>
-        <div class="canvas-wrap"><canvas id="chPendidikan"></canvas></div>
+        <div class="canvas-wrap"><canvas id="chPendidikan" aria-label="Grafik jenjang pendidikan"></canvas></div>
       </article>
       <article class="panel chart">
         <header class="panel__head"><h2>Distribusi Jabatan (Top 12)</h2></header>
-        <div class="canvas-wrap"><canvas id="chJabatan"></canvas></div>
+        <div class="canvas-wrap"><canvas id="chJabatan" aria-label="Grafik distribusi jabatan"></canvas></div>
       </article>
       <article class="panel chart">
         <header class="panel__head"><h2>Distribusi Divisi</h2><span class="hint">Jumlah per Divisi</span></header>
-        <div class="canvas-wrap"><canvas id="chPenugasan"></canvas></div>
+        <div class="canvas-wrap"><canvas id="chPenugasan" aria-label="Grafik distribusi divisi"></canvas></div>
       </article>
       <article class="panel chart">
         <header class="panel__head"><h2>Komposisi Agama</h2></header>
-        <div class="canvas-wrap"><canvas id="chAgama"></canvas></div>
+        <div class="canvas-wrap"><canvas id="chAgama" aria-label="Grafik komposisi agama"></canvas></div>
       </article>
       <article class="panel chart">
         <header class="panel__head"><h2>Kelengkapan Atribut</h2><span class="hint">% terisi</span></header>
-        <div class="canvas-wrap"><canvas id="chKelengkapan"></canvas></div>
+        <div class="canvas-wrap"><canvas id="chKelengkapan" aria-label="Grafik kelengkapan atribut"></canvas></div>
       </article>
       <article class="panel chart chart--wide">
         <header class="panel__head"><h2>Pendidikan per Provinsi</h2><span class="hint">bertumpuk</span></header>
-        <div class="canvas-wrap canvas-wrap--tall"><canvas id="chSilang"></canvas></div>
+        <div class="canvas-wrap canvas-wrap--tall"><canvas id="chSilang" aria-label="Grafik silang pendidikan per provinsi"></canvas></div>
       </article>
     </div>
   </section>
 
   <!-- ============ DIREKTORI ============ -->
-  <section class="view" data-view="directory" hidden>
+  <section class="view" id="view-directory" role="tabpanel" aria-labelledby="tab-directory" data-view="directory" hidden>
     <div class="panel__head panel__head--bare">
       <h2>Direktori Personel <span class="muted" id="dirCount"></span></h2>
       <div class="seg">
@@ -125,7 +126,7 @@
   </section>
 
   <!-- ============ TABEL ============ -->
-  <section class="view" data-view="table" hidden>
+  <section class="view" id="view-table" role="tabpanel" aria-labelledby="tab-table" data-view="table" hidden>
     <div class="panel">
       <div class="tbl-scroll"><table id="grid"><thead></thead><tbody></tbody></table></div>
       <div class="pager">
@@ -141,7 +142,7 @@
   </section>
 
   <!-- ============ KUALITAS DATA ============ -->
-  <section class="view" data-view="quality" hidden>
+  <section class="view" id="view-quality" role="tabpanel" aria-labelledby="tab-quality" data-view="quality" hidden>
     <div class="panel pad" id="qualitySummary"></div>
     <div class="panel"><div class="tbl-scroll"><table id="issueTable"><thead></thead><tbody></tbody></table></div></div>
   </section>
@@ -161,10 +162,10 @@
   </aside>
 </div>
 
-<div class="toast" id="toast" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous" defer></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js" integrity="sha384-gx12pQMMYnabkTgbCHqqrT65RwDnXI/f/dU2H9JUmT0KUeiMF5bf+yroQBmX0Nuk" crossorigin="anonymous" defer></script>
 <script type="module" src="./assets/js/app.js"></script>
 </body>
 </html>
