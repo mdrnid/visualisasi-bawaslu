@@ -2,44 +2,70 @@
 const registry = new Map();
 
 export const PALETTE = [
-
-"#F58220",
-
-"#FFB366",
-
-"#D96A00",
-
-"#C62828",
-
-"#F8A145",
-
-"#FDBA74",
-
-"#8D6E63"
-
+    '#F58220',
+    '#FFB366',
+    '#D96A00',
+    '#C62828',
+    '#F8A145',
+    '#FDBA74',
+    '#8D6E63',
 ];
 
 export function applyDefaults() {
-    if (!window.Chart) return;
+    // BUG LAMA: tidak ada penjagaan bila CDN Chart.js gagal dimuat -> ReferenceError
+    // yang menghentikan seluruh proses render.
+    if (typeof window === 'undefined' || !window.Chart) {
+        console.warn('[charts] Chart.js tidak termuat; bagian grafik dilewati.');
+        return false;
+    }
+    const { Chart } = window;
     Chart.defaults.font.family = "'Segoe UI', Inter, system-ui, sans-serif";
     Chart.defaults.font.size = 12;
     Chart.defaults.color = '#5c6a80';
     Chart.defaults.plugins.tooltip.padding = 10;
     Chart.defaults.plugins.tooltip.cornerRadius = 8;
     Chart.defaults.animation.duration = 350;
+    Chart.defaults.plugins.legend.position = 'bottom';
+    Chart.defaults.maintainAspectRatio = false;
+    return true;
 }
 
 function upsert(canvasId, config) {
-    const el = document.getElementById(canvasId);
-    if (!el) return;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !window.Chart) return null;
+
     const existing = registry.get(canvasId);
     if (existing) {
-        existing.data = config.data;
-        existing.options = config.options;
-        existing.update();
-        return;
+        // BUG LAMA: kanvas yang sudah diganti/dihapus dari DOM tetap tersimpan di
+        // registry, sehingga update menulis ke kanvas "hantu" dan memori bocor.
+        if (existing.canvas !== canvas || !existing.canvas.isConnected) {
+            existing.destroy();
+            registry.delete(canvasId);
+        } else {
+            existing.data = config.data;
+            existing.options = config.options;
+            existing.update();
+            return existing;
+        }
     }
-    registry.set(canvasId, new Chart(el, config));
+
+    const chart = new window.Chart(canvas, config);
+    registry.set(canvasId, chart);
+    return chart;
+}
+
+export function destroyChart(canvasId) {
+    const chart = registry.get(canvasId);
+    if (!chart) return;
+    chart.destroy();
+    registry.delete(canvasId);
+}
+
+export function destroyAll() {
+    for (const [id, chart] of registry) {
+        chart.destroy();
+        registry.delete(id);
+    }
 }
 
 const gridX = { grid: { color: '#FFE6CC' }, ticks: { precision: 0 } };
@@ -72,9 +98,9 @@ export function percentBar(id, items) {
             datasets: [
                 {
                     data: items.map((i) => i.value),
-                   backgroundColor: items.map((i) =>
-    i.value >= 80 ? '#F58220' : i.value >= 50 ? '#F7A34B' : '#C62828'
-),
+                    backgroundColor: items.map((i) =>
+                        i.value >= 80 ? '#F58220' : i.value >= 50 ? '#F7A34B' : '#C62828'
+                    ),
                     borderRadius: 6,
                     maxBarThickness: 24,
                 },
@@ -98,12 +124,14 @@ export function donutChart(id, { labels, values }) {
         type: 'doughnut',
         data: {
             labels,
-            datasets: [{
-                data: values,
-                backgroundColor: PALETTE,
-                borderWidth: 2,
-                borderColor: '#FFF8F1'
-            }]
+            datasets: [
+                {
+                    data: values,
+                    backgroundColor: PALETTE,
+                    borderWidth: 2,
+                    borderColor: '#FFF8F1',
+                },
+            ],
         },
         options: {
             responsive: true,
@@ -149,9 +177,4 @@ export function stackedBar(id, { rows, series }) {
             },
         },
     });
-}
-
-export function destroyAll() {
-    registry.forEach((c) => c.destroy());
-    registry.clear();
 }

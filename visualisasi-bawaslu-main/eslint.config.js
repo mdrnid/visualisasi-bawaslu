@@ -1,46 +1,47 @@
+const browserGlobals = {
+    window: 'readonly', document: 'readonly', console: 'readonly', fetch: 'readonly',
+    location: 'readonly', history: 'readonly', navigator: 'readonly',
+    URL: 'readonly', URLSearchParams: 'readonly', Blob: 'readonly',
+    sessionStorage: 'readonly', localStorage: 'readonly',
+    setTimeout: 'readonly', clearTimeout: 'readonly', setInterval: 'readonly',
+    clearInterval: 'readonly', requestAnimationFrame: 'readonly',
+    Image: 'readonly', IntersectionObserver: 'readonly', HTMLElement: 'readonly',
+    TextEncoder: 'readonly', TextDecoder: 'readonly', AbortController: 'readonly',
+    btoa: 'readonly', atob: 'readonly',
+    XLSX: 'readonly', Chart: 'readonly', // dimuat dari CDN sebagai global
+};
+
+const nodeGlobals = {
+    process: 'readonly', console: 'readonly', Buffer: 'readonly',
+    __dirname: 'readonly', __filename: 'readonly',
+    module: 'writable', require: 'readonly', exports: 'writable',
+    URL: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly',
+};
+
+const sharedRules = {
+    'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    'no-undef': 'error',
+    eqeqeq: ['error', 'smart'],
+    'no-var': 'error',
+    'prefer-const': 'error',
+    'no-implicit-coercion': 'warn',
+};
+
 export default [
-  {
-    languageOptions: {
-      ecmaVersion: "latest",
-      sourceType: "module",
-      globals: {
-        window: "readonly",
-        document: "readonly",
-        sessionStorage: "readonly",
-        localStorage: "readonly",
-        location: "readonly",
-        history: "readonly",
-        console: "readonly",
-        Blob: "readonly",
-        URL: "readonly",
-        URLSearchParams: "readonly",
-        setTimeout: "readonly",
-        clearTimeout: "readonly",
-        fetch: "readonly",
-        Chart: "readonly",
-        XLSX: "readonly",
-        process: "readonly",
-        Buffer: "readonly",
-        atob: "readonly",
-        btoa: "readonly",
-        escape: "readonly",
-        unescape: "readonly",
-        encodeURIComponent: "readonly",
-        decodeURIComponent: "readonly",
-        Date: "readonly",
-        Number: "readonly",
-        String: "readonly",
-        Set: "readonly",
-        Map: "readonly",
-        Math: "readonly",
-        Array: "readonly",
-        JSON: "readonly"
-      }
+    { ignores: ['node_modules/**', 'coverage/**', 'data/**'] },
+    {
+        files: ['assets/js/**/*.js'],
+        languageOptions: { ecmaVersion: 2023, sourceType: 'module', globals: browserGlobals },
+        rules: sharedRules,
     },
-    rules: {
-      "no-unused-vars": "warn",
-      "no-undef": "error",
-      "eqeqeq": ["error", "always"]
-    }
-  }
+    {
+        files: ['server.js', 'scripts/**/*.js'],
+        languageOptions: { ecmaVersion: 2023, sourceType: 'module', globals: { ...nodeGlobals, ...browserGlobals } },
+        rules: sharedRules,
+    },
+    {
+        files: ['scripts/**/*.mjs', 'tests/**/*.js'],
+        languageOptions: { ecmaVersion: 2023, sourceType: 'module', globals: nodeGlobals },
+        rules: sharedRules,
+    },
 ];

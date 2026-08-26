@@ -1,10 +1,13 @@
 /** Komposisi aplikasi: state, filter, sinkronisasi URL, dan orkestrasi render. */
 import { APP_CONFIG } from './config.js';
-import { FIELDS } from './schema.js';
-import { loadDataset, DataError } from './data-service.js';
+import { VISIBLE_FIELDS } from './schema.js';
+import { loadDataset, clearDatasetCache } from './data-service.js';
 import * as A from './analytics.js';
 import * as C from './charts.js';
 import * as UI from './ui.js';
+import { esc } from './text-utils.js';
+import { avatarMarkup, hydrateAvatars, clearPhotoCache } from './photos.js';
+import { attachAwards, clearAwardsCache, loadAwards } from './awards.js';
 
 const { $, $$ } = UI;
 
@@ -17,10 +20,13 @@ const FACETS = [
     { id: 'fAgama', key: 'agama', all: 'Semua Agama' },
 ];
 
+const VALID_VIEWS = new Set(['overview', 'directory', 'table', 'quality']);
+
 const state = {
     all: [],
     issues: [],
     meta: null,
+    version: 0,
     filters: { q: '', provinsi: '', kabkota: '', jabatan: '', gender: '', pendidikan: '', agama: '' },
     view: 'overview',
     table: { page: 0, pageSize: APP_CONFIG.ui.tablePageSize, sortKey: 'nama', sortDir: 1 },
@@ -31,21 +37,38 @@ const state = {
 
 function readUrl() {
     const p = new URLSearchParams(location.search);
-    for (const k of Object.keys(state.filters)) if (p.has(k)) state.filters[k] = p.get(k);
-    if (p.has('view')) state.view = p.get('view');
+    for (const k of Object.keys(state.filters)) {
+        if (p.has(k)) state.filters[k] = p.get(k);
+    }
+    const view = p.get('view');
+    if (view && VALID_VIEWS.has(view)) state.view = view;
     if (p.has('kabPage')) state.dir.kabkota = p.get('kabPage');
     if (p.has('personPage')) state.dir.personId = p.get('personPage');
 }
 
-function writeUrl() {
+function writeUrl({ push = false } = {}) {
     const p = new URLSearchParams();
-    for (const [k, v] of Object.entries(state.filters)) if (v) p.set(k, v);
+    for (const [k, v] of Object.entries(state.filters)) {
+        if (v) p.set(k, v);
+    }
     if (state.view !== 'overview') p.set('view', state.view);
     if (state.view === 'directory' && state.dir.kabkota) p.set('kabPage', state.dir.kabkota);
     if (state.view === 'directory' && state.dir.personId) p.set('personPage', state.dir.personId);
+    
     const qs = p.toString();
-    history.replaceState(null, '', qs ? '?' + qs : location.pathname);
+    const next = location.pathname + (qs ? '?' + qs : '');
+    if (next === location.pathname + location.search) return;
+
+    if (push) history.pushState(null, '', next);
+    else history.replaceState(null, '', next);
 }
+
+window.addEventListener('popstate', () => {
+    state.dir.kabkota = '';
+    state.dir.personId = '';
+    readUrl();
+    render({ syncUrl: false });
+});
 
 /* ---------- Seleksi data ---------- */
 
@@ -54,7 +77,7 @@ let _lastFilterKey = '',
 function selectRecords() {
     const f = state.filters;
     const { sortKey, sortDir } = state.table;
-    const key = JSON.stringify(f) + '|' + sortKey + '|' + sortDir + '|' + state.all.length;
+    const key = JSON.stringify([state.version, f, sortKey, sortDir, state.dir.sort]);
     if (key === _lastFilterKey) return _lastResult;
     _lastFilterKey = key;
 
@@ -87,6 +110,13 @@ function sortForDirectory(rows) {
     return rows.slice().sort((a, b) => String(a[s] || '').localeCompare(String(b[s] || ''), 'id'));
 }
 
+function setRecords(records, { issues = state.issues, meta = state.meta } = {}) {
+    state.all = records;
+    state.issues = issues;
+    state.meta = meta;
+    state.version += 1;
+    _lastFilterKey = '';
+}
 
 /* ---------- Direktori berbasis Kabupaten/Kota ---------- */
 
@@ -113,6 +143,7 @@ function ensureDirectoryStyles() {
             background: #fff;
             box-shadow: 0 8px 24px rgba(15,23,42,.055);
             cursor: pointer;
+            text-decoration: none;
             transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
         }
 
@@ -190,6 +221,7 @@ function ensureDirectoryStyles() {
             font: inherit;
             font-weight: 700;
             cursor: pointer;
+            text-decoration: none;
         }
 
         #view-directory .dir-back:hover {
@@ -228,6 +260,7 @@ function ensureDirectoryStyles() {
             background: #fff;
             box-shadow: 0 8px 24px rgba(15,23,42,.055);
             cursor: pointer;
+            text-decoration: none;
             transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
         }
 
@@ -245,52 +278,33 @@ function ensureDirectoryStyles() {
             align-items: flex-start;
         }
 
-        #view-directory .dir-person-avatar {
-            display: grid;
-            place-items: center;
-            flex: 0 0 58px;
-            width: 58px;
-            height: 58px;
-            border-radius: 14px;
-            overflow: hidden;
-            background: var(--brand-soft);
-            color: var(--brand);
-            font-size: 17px;
-            font-weight: 800;
-        }
-
-        #view-directory .dir-person-avatar img {
-            display: block;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
         #view-directory .dir-person-main {
-            min-width: 0;
             flex: 1;
+            min-width: 0;
         }
 
         #view-directory .dir-person-name {
             margin: 0;
+            color: var(--ink);
             font-size: 15px;
             font-weight: 750;
-            line-height: 1.35;
+            line-height: 1.3;
         }
 
         #view-directory .dir-person-role {
             margin: 3px 0 0;
             color: var(--muted);
             font-size: 12.5px;
+            line-height: 1.35;
         }
 
         #view-directory .dir-person-score {
             padding: 4px 8px;
             border-radius: 999px;
-            background: #e6f6ee;
-            color: var(--good);
+            background: var(--brand-soft);
+            color: var(--brand-dark);
             font-size: 11px;
-            font-weight: 750;
+            font-weight: 800;
         }
 
         #view-directory .dir-person-tags {
@@ -337,15 +351,6 @@ function ensureDirectoryStyles() {
         #view-directory .dir-person-detail-head {
             display:flex; align-items:center; gap:16px;
             padding:20px 22px; border-bottom:1px solid var(--line);
-        }
-        #view-directory .dir-person-detail-avatar {
-            width:72px; height:72px; flex:0 0 72px; display:grid; place-items:center;
-            border-radius:16px; overflow:hidden; background:var(--brand-soft); color:var(--brand);
-            font-size:20px; font-weight:800;
-        }
-
-        #view-directory .dir-person-detail-avatar img {
-            display:block; width:100%; height:100%; object-fit:cover;
         }
         #view-directory .dir-person-detail-title { flex:1; min-width:0; }
         #view-directory .dir-person-detail-title h2 { margin:0; font-size:22px; }
@@ -395,60 +400,6 @@ function ensureDirectoryStyles() {
         }
     `;
     document.head.appendChild(style);
-}
-
-function esc(value) {
-    return String(value ?? '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#039;');
-}
-
-function initials(name) {
-    const parts = String(name || '?').trim().split(/\s+/).filter(Boolean);
-    return (parts.slice(0, 2).map((p) => p[0]).join('') || '?').toUpperCase();
-}
-
-function photoFileName(name) {
-    return String(name || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '') + '.jpg';
-}
-
-// Foto personel otomatis berdasarkan nama.
-// Simpan foto di: assets/personel/
-// Contoh: NINGSIH PURWANTI, SH -> ningsih-purwanti-sh.jpg
-function personPhotoUrl(name) {
-    const slug = String(name || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-    return slug ? `assets/personel/${slug}.jpg` : '';
-}
-
-function personAvatar(name, detail = false) {
-    const cls = detail ? 'dir-person-detail-avatar' : 'dir-person-avatar';
-    const src = personPhotoUrl(name);
-    const fallback = initials(name);
-
-    if (detail) {
-        return `<div class="${cls}" aria-label="Foto ${esc(name || 'personel')}" style="width:180px !important;height:180px !important;min-width:180px !important;min-height:180px !important;flex:0 0 180px !important;display:grid !important;place-items:center !important;overflow:hidden !important;border-radius:50% !important;margin:0 auto !important;background:var(--brand-soft);">
-            <img src="${esc(src)}" alt="Foto ${esc(name || 'personel')}" style="width:100% !important;height:100% !important;display:block !important;object-fit:cover !important;border-radius:50% !important;" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">
-            <span style="display:none;">${esc(fallback)}</span>
-        </div>`;
-    }
-
-    return `<div class="${cls}" aria-label="Foto ${esc(name || 'personel')}">
-        <img src="${esc(src)}" alt="Foto ${esc(name || 'personel')}" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">
-        <span style="display:none;">${esc(fallback)}</span>
-    </div>`;
 }
 
 function renderDirectoryLocations(rows) {
@@ -503,10 +454,6 @@ function renderDirectoryLocations(rows) {
         : '<div class="dir-empty">Tidak ada Kabupaten/Kota pada data yang sedang dipilih.</div>';
 
     more.hidden = true;
-
-    // Card Kabupaten/Kota menggunakan link native agar klik selalu bekerja,
-    // termasuk setelah render ulang. URL membawa kabPage sehingga halaman
-    // khusus Kabupaten/Kota dapat dibuka langsung dan direfresh tanpa kehilangan konteks.
 }
 
 function renderDirectoryPersonDetail(rows) {
@@ -538,7 +485,7 @@ function renderDirectoryPersonDetail(rows) {
         </div>
     `;
 
-    const rowsHtml = FIELDS.map((f) => {
+    const rowsHtml = VISIBLE_FIELDS.map((f) => {
         const value = rec[f.key] ?? '';
         return `
             <div class="dir-detail-row">
@@ -552,7 +499,7 @@ function renderDirectoryPersonDetail(rows) {
     grid.innerHTML = `
         <article class="dir-person-detail">
             <div class="dir-person-detail-head" style="display:flex !important;flex-direction:column !important;align-items:center !important;justify-content:center !important;text-align:center !important;gap:18px !important;width:100% !important;padding:40px 20px 30px !important;">
-                ${personAvatar(rec.nama, true)}
+                ${avatarMarkup(rec, { size: 'xl' })}
                 <div class="dir-person-detail-title" style="width:100% !important;min-width:0 !important;flex:none !important;text-align:center !important;">
                     <h2 style="margin:0 !important;font-size:34px !important;text-align:center !important;">${esc(rec.nama || 'Tanpa Nama')}</h2>
                     <p style="margin:8px 0 0 !important;font-size:17px !important;text-align:center !important;">${esc(rec.jabatan || 'Jabatan belum diisi')} · ${Math.round(Number(rec._completeness || 0))}% kelengkapan</p>
@@ -560,6 +507,7 @@ function renderDirectoryPersonDetail(rows) {
             </div>
             <div class="dir-person-detail-body">
                 <div class="dir-person-detail-grid">${rowsHtml}</div>
+                ${UI.awardsSectionHtml(rec)}
                 <div class="dir-person-detail-footer">
                     <a class="btn btn--ghost" href="?${backParams.toString()}">← Kembali ke ${esc(kab || 'Direktori')}</a>
                     <button class="btn btn--primary" type="button" id="dirEditPerson" data-id="${esc(rec._id)}">✎ Edit Data</button>
@@ -567,6 +515,7 @@ function renderDirectoryPersonDetail(rows) {
             </div>
         </article>
     `;
+    hydrateAvatars(grid);
     more.hidden = true;
 
     const editBtn = $('#dirEditPerson');
@@ -607,7 +556,7 @@ function renderDirectoryKabupaten(rows) {
             return `
             <a class="dir-person-card" href="?${params.toString()}" aria-label="Buka detail ${esc(r.nama)}">
                 <div class="dir-person-top">
-                    ${personAvatar(r.nama)}
+                    ${avatarMarkup(r, { size: 'lg' })}
                     <div class="dir-person-main">
                         <h3 class="dir-person-name">${esc(r.nama || 'Tanpa Nama')}</h3>
                         <p class="dir-person-role">${esc(r.jabatan || 'Jabatan belum diisi')}</p>
@@ -625,6 +574,7 @@ function renderDirectoryKabupaten(rows) {
         `;}).join('')
         : '<div class="dir-empty">Tidak ada personel pada Kabupaten/Kota ini.</div>';
 
+    hydrateAvatars(grid);
     more.hidden = true;
 }
 
@@ -634,9 +584,6 @@ function renderDirectory(rows) {
     else renderDirectoryLocations(rows);
 }
 
-// Filter utama hanya ditampilkan pada halaman umum.
-// Saat pengguna membuka satu Kabupaten/Kota, halaman tersebut harus menjadi
-// halaman penuh tanpa panel pencarian/filter global di atasnya.
 function updateFilterVisibility() {
     const filterBar = $('#filterBar');
     if (!filterBar) return;
@@ -645,9 +592,38 @@ function updateFilterVisibility() {
     filterBar.hidden = isKabupatenPage;
 }
 
+function clampTablePage(total) {
+    const pages = Math.max(1, Math.ceil(total / state.table.pageSize));
+    state.table.page = Math.min(Math.max(0, state.table.page), pages - 1);
+    return pages;
+}
+
 /* ---------- Render ---------- */
 
-function render() {
+function renderCharts(rows) {
+    const prov = A.countBy(rows, 'provinsi');
+    const hintProv = $('#hintProv');
+    if (hintProv) hintProv.textContent = prov.labels.length + ' provinsi';
+    C.barChart('chProvinsi', prov, { horizontal: prov.labels.length > 7 });
+
+    const kabkota = A.countBy(rows, 'kabkota');
+    const hintKabkota = $('#hintKabkota');
+    if (hintKabkota) hintKabkota.textContent = kabkota.labels.length + ' kab/kota';
+    C.barChart('chKabkota', kabkota, { horizontal: kabkota.labels.length > 7 });
+
+    C.donutChart('chGender', A.countBy(rows, 'gender'));
+    C.donutChart('chPendidikan', A.countBy(rows, 'pendidikan', { sort: 'label' }));
+    C.barChart('chJabatan', A.countBy(rows, 'jabatan', { limit: APP_CONFIG.ui.topJabatan }), {
+        horizontal: true,
+        color: C.PALETTE[1],
+    });
+    C.barChart('chPenugasan', A.countBy(rows, 'div'), { color: C.PALETTE[4], horizontal: true });
+    C.barChart('chAgama', A.countBy(rows, 'agama'), { color: C.PALETTE[2] });
+    C.percentBar('chKelengkapan', A.completeness(rows));
+    C.stackedBar('chSilang', A.crossTab(rows, 'provinsi', 'pendidikan', { rowLimit: 12 }));
+}
+
+function render({ syncUrl = true } = {}) {
     const rows = selectRecords();
 
     FACETS.forEach(({ id, key, all }) => {
@@ -661,51 +637,38 @@ function render() {
 
     if (state.view === 'overview') {
         UI.renderKpis(A.kpis(rows, state.all));
+        renderCharts(rows);
+    } else {
+        C.destroyAll();
+    }
 
-        const prov = A.countBy(rows, 'provinsi');
-        const hintProv = $('#hintProv');
-        if (hintProv) hintProv.textContent = prov.labels.length + ' provinsi';
-        C.barChart('chProvinsi', prov, { horizontal: prov.labels.length > 7 });
-
-        const kabkota = A.countBy(rows, 'kabkota');
-        const hintKabkota = $('#hintKabkota');
-        if (hintKabkota) hintKabkota.textContent = kabkota.labels.length + ' kab/kota';
-        C.barChart('chKabkota', kabkota, { horizontal: kabkota.labels.length > 7 });
-
-        C.donutChart('chGender', A.countBy(rows, 'gender'));
-        C.donutChart('chPendidikan', A.countBy(rows, 'pendidikan', { sort: 'label' }));
-        C.barChart('chJabatan', A.countBy(rows, 'jabatan', { limit: APP_CONFIG.ui.topJabatan }), {
-            horizontal: true,
-            color: C.PALETTE[1],
-        });
-        C.barChart('chPenugasan', A.countBy(rows, 'div'), { color: C.PALETTE[4], horizontal: true });
-        C.barChart('chAgama', A.countBy(rows, 'agama'), { color: C.PALETTE[2] });
-        C.percentBar('chKelengkapan', A.completeness(rows));
-        C.stackedBar('chSilang', A.crossTab(rows, 'provinsi', 'pendidikan', { rowLimit: 12 }));
-    } else if (state.view === 'directory') {
+    if (state.view === 'directory') {
         const dirCount = $('#dirCount');
         if (dirCount) dirCount.textContent = '(' + rows.length + ' orang)';
         renderDirectory(rows);
     } else if (state.view === 'table') {
-        const maxPage = Math.max(0, Math.ceil(rows.length / state.table.pageSize) - 1);
-        state.table.page = Math.min(state.table.page, maxPage);
-        UI.renderTable(rows, state.table);
+        clampTablePage(rows.length);
+        UI.renderTable(rows, state.table.page, state.table.pageSize, {
+            sortKey: state.table.sortKey,
+            sortDir: state.table.sortDir,
+        });
     } else if (state.view === 'quality') {
         UI.renderQuality(state.issues, state.meta);
     }
 
-    // Update tab visual status for accessibility
+    // Update tab visual status
     $$('.tab').forEach((t) => {
         const isCurrent = t.dataset.view === state.view;
         t.setAttribute('aria-selected', isCurrent ? 'true' : 'false');
     });
 
     updateFilterVisibility();
-    writeUrl();
+    if (syncUrl) writeUrl();
     return rows;
 }
 
 function switchView(view) {
+    if (!VALID_VIEWS.has(view)) view = 'overview';
     state.view = view;
     $$('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.view === view));
     $$('.view').forEach((s) => {
@@ -723,7 +686,7 @@ function exportExcel(rows) {
     }
     const data = rows.map((r) => {
         const obj = {};
-        FIELDS.forEach((f) => {
+        VISIBLE_FIELDS.forEach((f) => {
             obj[f.label] = r[f.key] ?? '';
         });
         return obj;
@@ -731,6 +694,22 @@ function exportExcel(rows) {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Data Personel");
+
+    const awardRows = rows.flatMap((r) =>
+        (r._awards || []).map((a) => ({
+            'Kab/Kota': r.kabkota || a.kabkota,
+            Nama: r.nama || a.nama,
+            Jabatan: r.jabatan || a.jabatan,
+            'Kordinator Divisi': a.kordiv,
+            Wakordiv: a.wakordiv,
+            'Jenis Penghargaan': a.penghargaan,
+            Kategori: a.kategori,
+            'Link Bukti': a.bukti,
+        }))
+    );
+    if (awardRows.length) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(awardRows), 'Penghargaan');
+    }
     XLSX.writeFile(wb, 'personel-' + new Date().toISOString().slice(0, 10) + '.xlsx');
     UI.toast('Berhasil mengekspor ' + rows.length + ' baris ke Excel.', 'success');
 }
@@ -748,12 +727,13 @@ function debounce(fn, ms = 200) {
 /* ---------- CRUD Logic ---------- */
 function openModal(id = null) {
     const form = $('#dataForm');
+    if (!form) return;
     form.reset();
     $('#formRowId').value = '';
     $('#modalTitle').textContent = id ? 'Edit Data' : 'Tambah Data';
 
     if (id) {
-        const rec = state.all.find(r => r._id === id);
+        const rec = state.all.find((r) => r._id === id);
         if (rec) {
             $('#formRowId').value = id;
             $('#iNama').value = rec.nama || '';
@@ -780,7 +760,8 @@ function openModal(id = null) {
 }
 
 function closeModal() {
-    $('#modalForm').hidden = true;
+    const m = $('#modalForm');
+    if (m) m.hidden = true;
     document.body.style.overflow = '';
 }
 
@@ -808,20 +789,22 @@ function saveData() {
     };
 
     if (id) {
-        const index = state.all.findIndex(r => r._id === id);
+        const index = state.all.findIndex((r) => r._id === id);
         if (index !== -1) {
             state.all[index] = { ...state.all[index], ...newData };
         }
+        setRecords(state.all);
         UI.toast('Data berhasil diperbarui.', 'success');
     } else {
         const newId = 'row-new-' + Date.now();
         const newRecord = { 
             _id: newId, 
-            _rowNumber: state.all.length ? Math.max(...state.all.map(r => r._rowNumber)) + 1 : 1,
+            _rowNumber: state.all.length ? Math.max(...state.all.map((r) => r._rowNumber)) + 1 : 1,
             _completeness: 80,
             ...newData 
         };
         state.all.unshift(newRecord);
+        setRecords(state.all);
         UI.toast('Data baru berhasil ditambahkan.', 'success');
     }
 
@@ -834,7 +817,7 @@ async function syncToServer() {
     try {
         const rows = state.all.map((r) => {
             const obj = {};
-            FIELDS.forEach((f) => {
+            VISIBLE_FIELDS.forEach((f) => {
                 obj[f.label] = r[f.key] ?? '';
             });
             return obj;
@@ -843,7 +826,7 @@ async function syncToServer() {
         const response = await fetch('/api/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(rows)
+            body: JSON.stringify({ rows })
         });
         const resData = await response.json();
         
@@ -892,11 +875,11 @@ function bindEvents() {
     });
 
     $('#btnExport').addEventListener('click', () => exportExcel(selectRecords()));
-    $('#btnRefresh').addEventListener('click', () => bootstrap({ force: true }));
+    $('#btnRefresh').addEventListener('click', () => reload({ force: true }));
 
     $('#grid thead').addEventListener('click', (e) => {
         const th = e.target.closest('th');
-        if (!th) return;
+        if (!th || !th.dataset.key) return;
         const key = th.dataset.key;
         state.table.sortDir = state.table.sortKey === key ? -state.table.sortDir : 1;
         state.table.sortKey = key;
@@ -917,15 +900,6 @@ function bindEvents() {
         render();
     });
 
-    // Direktori: navigasi Kabupaten/Kota memakai link native.
-    // Tidak perlu event handler tambahan untuk card lokasi.
-
-    $('#view-directory').addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-
-        // Akses keyboard untuk card ditangani langsung oleh #dirGrid.
-    });
-
     $('#view-directory').addEventListener('change', (e) => {
         if (e.target.id === 'dirSort') {
             state.dir.sort = e.target.value;
@@ -933,28 +907,45 @@ function bindEvents() {
         }
     });
 
-    const openFromEvent = (e) => {
-        const card = e.target.closest('.person, tr[data-id]');
-        if (!card || e.target.closest('a') || e.target.closest('.chk-col') || e.target.closest('input[type="checkbox"]')) return;
-        const rec = state.all.find((r) => r._id === card.dataset.id);
+    $('#view-directory').addEventListener('click', (e) => {
+        const link = e.target.closest('a');
+        if (!link || !link.getAttribute('href')?.startsWith('?')) return;
+        e.preventDefault();
+        const url = new URL(link.href, window.location.href);
+        state.dir.kabkota = url.searchParams.get('kabPage') || '';
+        state.dir.personId = url.searchParams.get('personPage') || '';
+        const view = url.searchParams.get('view');
+        if (view && VALID_VIEWS.has(view)) state.view = view;
+        writeUrl({ push: true });
+        render({ syncUrl: false });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    // Delegasi klik tabel (pengganti onclick inline)
+    $('#grid').addEventListener('click', (e) => {
+        if (e.target.closest('.chk-col') || e.target.closest('a') || e.target.closest('button')) return;
+        const tr = e.target.closest('tr[data-id]');
+        if (!tr) return;
+        const rec = state.all.find((r) => r._id === tr.dataset.id);
         if (rec) UI.openDrawer(rec);
-    };
-    $('#grid tbody').addEventListener('click', openFromEvent);
+    });
+
+    $('#grid').addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const tr = e.target.closest('tr[data-id]');
+        if (!tr) return;
+        e.preventDefault();
+        const rec = state.all.find((r) => r._id === tr.dataset.id);
+        if (rec) UI.openDrawer(rec);
+    });
 
     $('#drawer').addEventListener('click', (e) => {
         if (e.target.hasAttribute('data-close')) UI.closeDrawer();
         
-        // Listener untuk tombol Edit di dalam drawer
         const btnEdit = e.target.closest('#btnEditData');
         if (btnEdit) {
             UI.closeDrawer();
             openModal(btnEdit.dataset.id);
-        }
-    });
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            UI.closeDrawer();
-            closeModal();
         }
     });
 
@@ -967,7 +958,6 @@ function bindEvents() {
         saveData();
     });
 
-    // Event listener untuk Tambah Data dan Hapus Data
     $('#btnAddData')?.addEventListener('click', () => {
         openModal();
     });
@@ -987,7 +977,6 @@ function bindEvents() {
         $('#btnCancelDelete').hidden = true;
         $('#btnConfirmDelete').hidden = true;
         
-        // Uncheck all when canceling
         $$('.chk-row').forEach(c => c.checked = false);
         const chkAll = $('#chkAll');
         if (chkAll) chkAll.checked = false;
@@ -999,12 +988,12 @@ function bindEvents() {
             UI.toast('Pilih minimal satu baris data untuk dihapus.', 'warn');
             return;
         }
-        if (confirm('Yakin ingin menghapus ' + checked.length + ' data terpilih?')) {
-            const idsToDelete = new Set(checked.map(c => c.value));
-            state.all = state.all.filter(r => !idsToDelete.has(r._id));
+        if (window.confirm('Yakin ingin menghapus ' + checked.length + ' data terpilih?')) {
+            const idsToDelete = new Set(checked.map((c) => c.value));
+            const updated = state.all.filter((r) => !idsToDelete.has(r._id));
+            setRecords(updated);
             state.table.page = 0;
             
-            // Exit delete mode
             $('#grid').classList.remove('delete-mode');
             $('#btnAddData').hidden = false;
             $('#btnDeleteMode').hidden = false;
@@ -1034,18 +1023,22 @@ function bindEvents() {
     });
 }
 
-/* ---------- Bootstrap ---------- */
+/* ---------- Bootstrap & Reload ---------- */
 
-async function bootstrap({ force = false } = {}) {
+async function reload({ force = false } = {}) {
+    if (force) {
+        clearDatasetCache();
+        clearPhotoCache();
+        clearAwardsCache();
+    }
     UI.showState(
         'loading',
         force ? 'Mengambil versi terbaru berkas data…' : 'Memuat data dari ' + APP_CONFIG.dataSource.url + ' …'
     );
     try {
         const { records, issues, meta, fromCache } = await loadDataset({ force });
-        state.all = records;
-        state.issues = issues;
-        state.meta = meta;
+        const linkage = attachAwards(records, await loadAwards({ force }));
+        setRecords(records, { issues, meta });
 
         const appName = $('#appName');
         const appOrg = $('#appOrg');
@@ -1065,9 +1058,15 @@ async function bootstrap({ force = false } = {}) {
         if (meta.unmappedColumns > 0) {
             UI.toast(meta.unmappedColumns + ' kolom pada berkas tidak dikenali dan diabaikan.', 'warn');
         }
+        if (linkage.unmatched.length) {
+            UI.toast(
+                linkage.unmatched.length +
+                    ' penghargaan belum cocok dengan personel mana pun. Periksa ejaan nama pada data/penghargaan.json.',
+                'warn'
+            );
+        }
     } catch (err) {
-        const isData = err instanceof DataError;
-        UI.showState('error', isData ? err.message : 'Terjadi kesalahan tak terduga.', isData ? err.hint : String(err));
+        UI.showError(err);
         $('#filterBar').hidden = true;
         console.error(err);
     }
@@ -1085,7 +1084,7 @@ function start() {
     C.applyDefaults();
     readUrl();
     bindEvents();
-    bootstrap();
+    reload();
 }
 
 if (document.readyState === 'loading') {

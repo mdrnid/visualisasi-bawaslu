@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { countBy, completeness, crossTab, kpis } from '../assets/js/analytics.js';
+import { countBy, completeness, kpis } from '../assets/js/analytics.js';
 
 describe('analytics.js Pure Calculations', () => {
     const sampleRecords = [

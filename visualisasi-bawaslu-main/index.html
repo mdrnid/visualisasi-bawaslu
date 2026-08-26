@@ -3,8 +3,17 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="description" content="Direktori dan dashboard analitik personel" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self';" />
+<meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self';
+             base-uri 'self';
+             object-src 'none';
+             form-action 'self';
+             script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com;
+             style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+             img-src 'self' data:;
+             connect-src 'self';"
+/>
 <title>Direktori &amp; Dashboard Personel</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" />
 <link rel="stylesheet" href="./assets/css/styles.css" />
@@ -16,7 +25,7 @@
   <div class="appbar__inner">
     <div class="brand">
       <div class="brand__mark" aria-hidden="true">
-  <img src="/assets/image/bawaslu.png" alt="Logo" class="brand__logo">
+  <img src="./assets/logo-bawaslu.png" alt="Logo" class="brand__logo" width="40" height="40" decoding="async">
 </div>
       <div>
         <h1 class="brand__title" id="appName">Direktori &amp; Dashboard Personel</h1>

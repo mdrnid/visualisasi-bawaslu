@@ -3,7 +3,14 @@
  * memvalidasi, dan menyimpan cache. Tidak ada satu pun operasi DOM di sini.
  */
 import { APP_CONFIG } from './config.js';
-import { mapHeader, headerScore, normalizeRecord, validateRecord, findDuplicates } from './schema.js';
+import {
+    mapHeader,
+    headerScore,
+    normalizeRecord,
+    validateRecord,
+    findDuplicates,
+    assignStableIds,
+} from './schema.js';
 
 class DataError extends Error {
     constructor(message, hint) {
@@ -13,13 +20,29 @@ class DataError extends Error {
     }
 }
 
-/** Ubah matriks sel menjadi objek mentah berdasarkan baris header terbaik. */
+function buildColumnMap(headerRow, subHeaderRow) {
+    const maxCols = Math.max(headerRow.length, subHeaderRow ? subHeaderRow.length : 0);
+    let ordinalSeen = 0;
+    return Array.from({ length: maxCols }).map((_, c) => {
+        const combined = [headerRow[c], subHeaderRow ? subHeaderRow[c] : '']
+            .map((v) => String(v ?? '').trim())
+            .filter(Boolean)
+            .join(' ');
+        const key = mapHeader(combined);
+        if (key === '__ORDINAL__') {
+            ordinalSeen += 1;
+            return ordinalSeen === 1 ? 'no' : 'noUrut';
+        }
+        return key;
+    });
+}
+
 function gridToRaw(grid) {
     if (!grid.length) throw new DataError('Sheet kosong.', 'Pastikan sheet pertama berisi data.');
 
     const scanTo = Math.min(grid.length, APP_CONFIG.dataSource.headerScanRows);
-    let headerIndex = 0,
-        bestScore = -1;
+    let headerIndex = 0;
+    let bestScore = -1;
     for (let i = 0; i < scanTo; i += 1) {
         const score = headerScore(grid[i]);
         if (score > bestScore) {
@@ -34,24 +57,20 @@ function gridToRaw(grid) {
         );
     }
 
-    let ordinalSeen = 0;
-    const maxCols = Math.max(grid[headerIndex].length, grid[headerIndex + 1]?.length || 0);
-    const columnMap = Array.from({ length: maxCols }).map((_, c) => {
-        // Gabungkan baris header saat ini dengan baris di bawahnya untuk menangani header yang di-merge (seperti Media Sosial)
-        const h = grid[headerIndex][c];
-        const subH = grid[headerIndex + 1] && grid[headerIndex + 1][c];
-        const combinedH = [h, subH].filter(Boolean).join(' ');
+    // BUG LAMA: sub-header (mis. "MEDIA SOSIAL" -> FACEBOOK | INSTAGRAM) dipakai
+    // untuk memetakan kolom, TETAPI baris data tetap dimulai dari headerIndex + 1,
+    // sehingga baris sub-header itu sendiri ikut masuk sebagai data.
+    const nextRow = Array.isArray(grid[headerIndex + 1]) ? grid[headerIndex + 1] : null;
+    const baseMap = buildColumnMap(grid[headerIndex], null);
+    const namaCol = baseMap.indexOf('nama');
+    const nextNama = nextRow && namaCol >= 0 ? String(nextRow[namaCol] ?? '').trim() : '';
+    const isSubHeader = Boolean(nextRow) && headerScore(nextRow) >= 2 && (!nextNama || mapHeader(nextNama) !== null);
 
-        const key = mapHeader(combinedH);
-        if (key === '__ORDINAL__') {
-            ordinalSeen += 1;
-            return ordinalSeen === 1 ? 'no' : 'noUrut';
-        }
-        return key;
-    });
+    const columnMap = buildColumnMap(grid[headerIndex], isSubHeader ? nextRow : null);
+    const firstDataRow = headerIndex + (isSubHeader ? 2 : 1);
 
     const rows = [];
-    for (let i = headerIndex + 1; i < grid.length; i += 1) {
+    for (let i = firstDataRow; i < grid.length; i += 1) {
         const cells = grid[i];
         const obj = { __row: i + 1 };
         let hasValue = false;
@@ -65,22 +84,49 @@ function gridToRaw(grid) {
     }
 
     const recognized = columnMap.filter(Boolean).length;
-    return { rows, meta: { headerIndex, recognized, totalColumns: maxCols } };
+    return {
+        rows,
+        meta: { headerIndex, subHeaderUsed: isSubHeader, recognized, totalColumns: columnMap.length },
+    };
+}
+
+/**
+ * CATATAN KEAMANAN: base64 di bawah ini HANYA menyulitkan pembacaan sekilas.
+ * Ini BUKAN enkripsi dan tidak melindungi PII dari ekstensi browser atau
+ * pengguna yang punya akses ke perangkat. Perlindungan sebenarnya harus di
+ * lapisan server (HTTPS + autentikasi). Klaim di README perlu dikoreksi.
+ */
+const CACHE_VERSION = 5;
+const cacheKey = () => APP_CONFIG.cache.key + ':v' + CACHE_VERSION + ':' + APP_CONFIG.dataSource.url;
+
+function toBase64(text) {
+    const bytes = new TextEncoder().encode(text);
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+}
+
+function fromBase64(b64) {
+    const binary = atob(b64);
+    const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
 }
 
 function readCache() {
     if (!APP_CONFIG.cache.enabled) return null;
+    const key = cacheKey();
     try {
-        const raw = sessionStorage.getItem(APP_CONFIG.cache.key);
+        const raw = sessionStorage.getItem(key);
         if (!raw) return null;
-        // Obfuscate to prevent casual scraping of PII from console/extensions
-        const decoded = decodeURIComponent(escape(atob(raw)));
-        const blob = JSON.parse(decoded);
-        if (!blob) return null;
-        const ageMin = (Date.now() - blob.cachedAt) / 60000;
-        if (ageMin > APP_CONFIG.cache.ttlMinutes) return null;
+        const blob = JSON.parse(fromBase64(raw));
+        const ageMin = (Date.now() - (blob?.cachedAt ?? 0)) / 60000;
+        if (!blob || ageMin > APP_CONFIG.cache.ttlMinutes) {
+            sessionStorage.removeItem(key); // jangan tinggalkan PII basi
+            return null;
+        }
         return blob;
     } catch {
+        sessionStorage.removeItem(key);
         return null;
     }
 }
@@ -88,34 +134,49 @@ function readCache() {
 function writeCache(payload) {
     if (!APP_CONFIG.cache.enabled) return;
     try {
-        const dataStr = JSON.stringify({ ...payload, cachedAt: Date.now() });
-        const encoded = btoa(unescape(encodeURIComponent(dataStr)));
-        sessionStorage.setItem(APP_CONFIG.cache.key, encoded);
+        sessionStorage.setItem(cacheKey(), toBase64(JSON.stringify({ ...payload, cachedAt: Date.now() })));
     } catch {
-        /* session storage quota full or blocked */
+        /* kuota sessionStorage penuh atau diblokir — abaikan, cache bersifat opsional */
     }
 }
 
-/**
- * Memuat dataset dari sumber yang dikonfigurasi.
- * @param {{force?: boolean}} options
- */
+/** Dipanggil tombol "Muat Ulang Data" agar cache benar-benar bersih. */
+export function clearDatasetCache() {
+    try {
+        sessionStorage.removeItem(cacheKey());
+    } catch {
+        /* diabaikan */
+    }
+}
+
 export async function loadDataset({ force = false } = {}) {
     if (!force) {
         const cached = readCache();
         if (cached) return { ...cached, fromCache: true };
     }
-
-    const url = APP_CONFIG.dataSource.url + (force ? '?t=' + Date.now() : '');
-    let response;
-    try {
-        response = await fetch(url, { cache: force ? 'reload' : 'default' });
-    } catch {
+    if (typeof XLSX === 'undefined') {
         throw new DataError(
-            'Tidak dapat mengambil berkas data.',
-            'Halaman ini harus dijalankan lewat HTTP server (mis. "npx serve"), bukan dibuka langsung dari file://.'
+            'Pustaka pembaca Excel gagal dimuat.',
+            'Periksa koneksi ke cdn.sheetjs.com atau host berkas xlsx.full.min.js secara lokal.'
         );
     }
+
+    const url = APP_CONFIG.dataSource.url + (force ? '?t=' + Date.now() : '');
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timeout = controller ? setTimeout(() => controller.abort(), 20000) : null;
+
+    let response;
+    try {
+        response = await fetch(url, { cache: force ? 'reload' : 'default', signal: controller?.signal });
+    } catch (err) {
+        throw new DataError(
+            err?.name === 'AbortError' ? 'Pengambilan berkas data melebihi batas waktu.' : 'Tidak dapat mengambil berkas data.',
+            'Halaman ini harus dijalankan lewat HTTP server (npm run dev), bukan dibuka langsung dari file://.'
+        );
+    } finally {
+        if (timeout) clearTimeout(timeout);
+    }
+
     if (!response.ok) {
         throw new DataError(
             'Berkas data tidak ditemukan (HTTP ' + response.status + ').',
@@ -136,7 +197,7 @@ export async function loadDataset({ force = false } = {}) {
     const { rows, meta } = gridToRaw(grid);
 
     const cc = APP_CONFIG.ui.defaultCountryCode;
-    const records = rows.map((raw, i) => normalizeRecord(raw, i, cc));
+    const records = assignStableIds(rows.map((raw, i) => normalizeRecord(raw, i, cc)));
     const issues = [...records.flatMap(validateRecord), ...findDuplicates(records)];
 
     const payload = {
@@ -155,5 +216,3 @@ export async function loadDataset({ force = false } = {}) {
     writeCache(payload);
     return { ...payload, fromCache: false };
 }
-
-export { DataError };

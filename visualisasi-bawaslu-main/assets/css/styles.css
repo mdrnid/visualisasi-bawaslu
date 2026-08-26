@@ -663,26 +663,55 @@ select:focus{
     align-items: flex-start
 }
 
-.avatar{
-
-    width:52px;
-
-    height:52px;
-
-    background:#FFF2E8;
-
-    color:#F58220;
-
-    font-size:18px;
-
-    font-weight:700;
-
+/* ===== Avatar personel (satu sistem untuk semua tampilan) ===== */
+.avatar {
+    --avatar-size: 52px;
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: 0 0 var(--avatar-size);
+    width: var(--avatar-size);
+    height: var(--avatar-size);
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--brand-soft);
+    color: var(--brand);
+    font-weight: 800;
+    font-size: calc(var(--avatar-size) * 0.34);
+    line-height: 1;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    user-select: none;
 }
-.avatar--lg {
-    width: 60px;
-    height: 60px;
-    flex-basis: 60px;
-    font-size: 19px
+
+.avatar--sm { --avatar-size: 40px; }
+.avatar--md { --avatar-size: 52px; }
+.avatar--lg { --avatar-size: 72px; }
+.avatar--xl { --avatar-size: 180px; }
+
+.avatar__initials { pointer-events: none; }
+
+.avatar__img {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* kepala biasanya di bagian atas foto formal */
+    object-position: center top;
+}
+
+.avatar.has-photo { background: #eef2f7; }
+.avatar.has-photo .avatar__initials { display: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+    .avatar__img { animation: avatar-in 0.18s ease-out both; }
+    @keyframes avatar-in { from { opacity: 0; } to { opacity: 1; } }
+}
+
+@media print {
+    .avatar { border: 1px solid var(--line); }
 }
 
 .person__id {
@@ -1452,21 +1481,6 @@ tbody tr:hover td.td-sorted {
     margin-bottom:20px;
 }
 
-.dir-profile-photo img,
-.dir-profile-photo .person-avatar,
-.dir-profile-photo .dir-person-detail-avatar,
-.person-avatar{
-    width:220px !important;
-    height:220px !important;
-    min-width:220px !important;
-    min-height:220px !important;
-    border-radius:50% !important;
-    overflow:hidden !important;
-    display:flex !important;
-    justify-content:center !important;
-    align-items:center !important;
-}
-
 .dir-profile-name{
     width:100%;
     text-align:center;
@@ -1479,5 +1493,166 @@ tbody tr:hover td.td-sorted {
 .dir-profile-score{
     width:100%;
     text-align:center;
+}
+
+/* ===== Penghargaan & prestasi ===== */
+.awards {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+}
+.awards__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.awards__title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+}
+.awards__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: var(--brand-soft);
+    color: var(--brand-dark);
+    font-size: 12px;
+    font-weight: 700;
+}
+.awards__empty {
+    margin: 0;
+    padding: 14px 16px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 13px;
+}
+.awards__list {
+    counter-reset: award;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+}
+.award {
+    counter-increment: award;
+    position: relative;
+    padding: 14px 16px 14px 46px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    transition: var(--transition);
+}
+.award::before {
+    content: counter(award);
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--brand);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+}
+.award:hover {
+    border-color: var(--brand);
+    box-shadow: var(--shadow-sm);
+}
+.award__name {
+    margin: 0 0 8px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    font-weight: 600;
+    color: var(--ink);
+}
+.award__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.award__tag {
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--brand-soft);
+    color: var(--brand-dark);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.award__link {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--brand-dark);
+    text-decoration: none;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--surface-2, rgba(0, 0, 0, 0.04));
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.award__link:hover {
+    background: var(--brand-soft);
+    text-decoration: none;
+}
+.award__badge {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+.award__badge--pdf {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+.award__badge--image {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+.award__badge--drive {
+    background: #fef3c7;
+    color: #b45309;
+}
+.award__badge--link {
+    background: #f3e8ff;
+    color: #7e22ce;
+}
+.award__link--none {
+    background: transparent;
+    color: var(--muted);
+    font-weight: 500;
+    cursor: default;
+}
+.awards--compact .award {
+    padding: 12px 14px 12px 42px;
+}
+.dir-person-tag--award {
+    background: #ffe3c2 !important;
+    color: var(--brand-dark) !important;
+}
+@media print {
+    .award__link {
+        display: none;
+    }
 }
 

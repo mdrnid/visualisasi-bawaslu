@@ -10,7 +10,7 @@
 <body>
   <header class="lp-nav">
     <a class="lp-brand" href="./landing.html" aria-label="Beranda Bawaslu">
-      <img src="./assets/image/bawaslu.png" alt="Logo Bawaslu">
+      <img src="./assets/logo-bawaslu.png" alt="Logo Bawaslu" width="40" height="40">
       <div>
         <strong>Direktori Personel</strong>
         <span>Bawaslu Sulawesi Selatan</span>
@@ -55,7 +55,7 @@
             <span>PERSONEL BAWASLU</span>
             <span class="mini-badge">LIVE DATA</span>
           </div>
-          <strong>80</strong>
+          <strong data-stat="personel-hero">–</strong>
           <p>Baris data personel</p>
           <div class="mini-bars">
             <i style="--h: 45%"></i>
@@ -70,23 +70,23 @@
 
         <div class="data-card card-small small-one">
           <span>Wilayah</span>
-          <strong>1</strong>
+          <strong data-stat="provinsi">–</strong>
           <small>Provinsi</small>
         </div>
 
         <div class="data-card card-small small-two">
           <span>Kelengkapan</span>
-          <strong>100%</strong>
+          <strong data-stat="kelengkapan-hero">–</strong>
           <small>Profil personel</small>
         </div>
       </div>
     </section>
 
     <section class="stats" id="data">
-      <div><strong>80</strong><span>Personel</span></div>
-      <div><strong>1</strong><span>Provinsi</span></div>
-      <div><strong>14+</strong><span>Kabupaten / Kota</span></div>
-      <div><strong>100%</strong><span>Kelengkapan profil</span></div>
+      <div><strong data-stat="personel">–</strong><span>Personel</span></div>
+      <div><strong data-stat="provinsi">–</strong><span>Provinsi</span></div>
+      <div><strong data-stat="kabkota">–</strong><span>Kabupaten / Kota</span></div>
+      <div><strong data-stat="kelengkapan">–</strong><span>Kelengkapan profil</span></div>
     </section>
 
     <section class="section about" id="tentang">
@@ -139,7 +139,7 @@
 
   <footer class="lp-footer">
     <div class="lp-brand">
-      <img src="./assets/image/bawaslu.png" alt="Logo Bawaslu">
+      <img src="./assets/logo-bawaslu.png" alt="Logo Bawaslu" width="40" height="40">
       <div>
         <strong>Bawaslu Sulawesi Selatan</strong>
         <span>Direktori & Dashboard Personel</span>
@@ -147,5 +147,7 @@
     </div>
     <p>© 2026 — Sistem Informasi Direktori Personel</p>
   </footer>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script type="module" src="./assets/js/landing.js"></script>
 </body>
 </html>

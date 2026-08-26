@@ -2,6 +2,7 @@
  * Kontrak data: definisi kolom, pengenalan header, normalisasi nilai, dan aturan validasi.
  * Semua perubahan struktur data cukup dilakukan di berkas ini.
  */
+import { slugify } from './text-utils.js';
 
 export const FIELDS = Object.freeze([
     { key: 'no', label: 'No', group: 'identitas', type: 'number' },
@@ -16,6 +17,7 @@ export const FIELDS = Object.freeze([
     { key: 'amj', label: 'Akhir Masa Jabatan', group: 'jabatan', type: 'category', facet: true },
     { key: 'agama', label: 'Agama', group: 'profil', type: 'category', facet: true },
     { key: 'pendidikan', label: 'Jenjang Pendidikan', group: 'profil', type: 'category', facet: true },
+    { key: 'foto', label: 'Foto', group: 'profil', type: 'photo', hidden: true },
     { key: 'hp', label: 'Nomor HP/WhatsApp', group: 'kontak', type: 'phone', searchable: true },
     { key: 'emailP', label: 'E-mail Pribadi', group: 'kontak', type: 'email', searchable: true },
     { key: 'emailK', label: 'E-mail Kantor', group: 'kontak', type: 'email', searchable: true },
@@ -26,6 +28,9 @@ export const FIELDS = Object.freeze([
 ]);
 
 export const FIELD_BY_KEY = Object.freeze(Object.fromEntries(FIELDS.map((f) => [f.key, f])));
+
+/** Kolom yang benar-benar ditampilkan di tabel & drawer (foto dipakai sebagai avatar). */
+export const VISIBLE_FIELDS = Object.freeze(FIELDS.filter((f) => !f.hidden));
 
 /** Atribut yang dihitung dalam skor kelengkapan profil. */
 export const COMPLETENESS_KEYS = Object.freeze([
@@ -47,6 +52,7 @@ const slug = (v) =>
 
 /** Urutan penting: pola paling spesifik didahulukan. */
 const HEADER_RULES = [
+    ['foto', (n) => n === 'FOTO' || n === 'PHOTO' || n.includes('PASFOTO') || n.includes('FOTOPROFIL') || n.includes('URLFOTO')],
     ['provinsi', (n) => n.includes('PROVINSI') || n === 'PROV'],
     ['kabkota', (n) => n.includes('KABKOTA') || n.includes('KABUPATEN') || n.includes('KOTA')],
     ['gender', (n) => n.includes('JENISKELAMIN') || n === 'GENDER' || n === 'JK' || n === 'LP'],
@@ -130,13 +136,21 @@ export function normAgama(v) {
     return map[n] || (v ? titleCase(String(v).trim()) : '');
 }
 
-/** 08xx / +62xx / (0411) xxx → 62xxxxxxxxxx */
+/**
+ * Normalisasi nomor Indonesia ke format 62xxxxxxxxxx.
+ * Perbaikan dari versi lama:
+ *  - "0811-1111 / 0822-2222" tidak lagi digabung jadi satu nomor raksasa.
+ *  - Awalan internasional 0062 / +62 ditangani eksplisit.
+ *  - Angka nol beruntun ("0081...") ikut dibersihkan.
+ */
 export function normPhone(v, cc = '62') {
-    const d = String(v ?? '').replace(/\D/g, '');
+    const first = String(v ?? '').split(/[\/;,]|\bdan\b|\batau\b/i)[0];
+    let d = first.replace(/\D/g, '');
     if (!d) return '';
-    if (d.startsWith('0')) return cc + d.slice(1);
-    if (d.startsWith(cc)) return d;
-    if (d.length >= 9 && d.length <= 13) return cc + d;
+    if (d.startsWith('00' + cc)) d = d.slice(2);
+    if (d.startsWith('0')) return cc + d.replace(/^0+/, '');
+    if (d.startsWith(cc) && d.length >= 10) return d;
+    if (d.length >= 8 && d.length <= 13) return cc + d;
     return d;
 }
 
@@ -155,7 +169,7 @@ export function normUrl(v) {
 
 /** Ubah satu baris mentah menjadi record bersih yang siap dianalisis. */
 export function normalizeRecord(raw, index, cc = '62') {
-    const rec = { _id: 'row-' + (index + 1), _rowNumber: raw.__row ?? index + 2 };
+    const rec = { _rowNumber: raw.__row ?? index + 2 };
     for (const f of FIELDS) {
         const v = raw[f.key];
         if (isBlank(v)) {
@@ -164,6 +178,10 @@ export function normalizeRecord(raw, index, cc = '62') {
         }
         const s = String(v).trim().replace(/\s+/g, ' ');
         switch (f.key) {
+            case 'foto':
+                // jangan di-titleCase; ini path/URL. Blokir skema berbahaya.
+                rec[f.key] = /^\s*(javascript|vbscript):/i.test(s) ? '' : s.replace(/^\.?\//, '');
+                break;
             case 'gender':
                 rec[f.key] = normGender(s);
                 break;
@@ -202,7 +220,29 @@ export function normalizeRecord(raw, index, cc = '62') {
         .map((f) => rec[f.key])
         .join(' ')
         .toLowerCase();
+    
+    // Kunci identitas stabil (tidak bergantung pada urutan array), dipakai
+    // untuk deep link ?personPage=..., drawer, dan mode hapus.
+    rec._key =
+        [slugify(rec.kabkota), slugify(rec.nama)].filter(Boolean).join('--') || 'baris-' + rec._rowNumber;
+    rec._id = rec._key; // difinalkan oleh assignStableIds()
+
     return rec;
+}
+
+/**
+ * Memberi _id unik & stabil. Dipanggil sekali setelah seluruh record dinormalisasi,
+ * karena deteksi tabrakan butuh melihat semua baris.
+ */
+export function assignStableIds(records) {
+    const seen = new Map();
+    for (const rec of records) {
+        const base = rec._key || 'baris-' + rec._rowNumber;
+        const n = (seen.get(base) || 0) + 1;
+        seen.set(base, n);
+        rec._id = n === 1 ? base : base + '-' + n;
+    }
+    return records;
 }
 
 /* ---------- Validasi ---------- */
@@ -222,8 +262,8 @@ export function validateRecord(rec) {
         if (rec[k] && !EMAIL_RE.test(rec[k]))
             push('error', FIELD_BY_KEY[k].label, 'Format e-mail tidak valid: ' + rec[k]);
     }
-    if (rec.hp && (rec.hp.length < 10 || rec.hp.length > 15)) {
-        push('warning', 'Nomor HP/WhatsApp', 'Panjang nomor tidak wajar: ' + rec.hp);
+    if (rec.hp && !/^62\d{8,13}$/.test(rec.hp)) {
+        push('warning', 'Nomor HP/WhatsApp', 'Format nomor tidak wajar: ' + rec.hp);
     }
     if (!rec.hp && !rec.emailK && !rec.emailP) {
         push('warning', 'Kontak', 'Tidak ada satu pun kanal kontak');
@@ -248,7 +288,9 @@ export function findDuplicates(records) {
                     field: FIELD_BY_KEY[key].label,
                     message: 'Duplikat dengan baris ' + seen.get(v) + ': ' + v,
                 });
-            } else seen.set(v, r._rowNumber);
+            } else {
+                seen.set(v, r._rowNumber);
+            }
         }
     }
     return issues;
