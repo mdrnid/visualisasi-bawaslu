@@ -3,8 +3,17 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="description" content="Direktori dan dashboard analitik personel" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self';" />
+<meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self';
+             base-uri 'self';
+             object-src 'none';
+             form-action 'self';
+             script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com;
+             style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+             img-src 'self' data:;
+             connect-src 'self';"
+/>
 <title>Direktori &amp; Dashboard Personel</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" />
 <link rel="stylesheet" href="./assets/css/styles.css" />
@@ -16,7 +25,7 @@
   <div class="appbar__inner">
     <div class="brand">
       <div class="brand__mark" aria-hidden="true">
-  <img src="/assets/image/bawaslu.png" alt="Logo" class="brand__logo">
+  <img src="./assets/logo-bawaslu.png" alt="Logo" class="brand__logo" width="40" height="40" decoding="async">
 </div>
       <div>
         <h1 class="brand__title" id="appName">Direktori &amp; Dashboard Personel</h1>
@@ -24,10 +33,20 @@
       </div>
     </div>
     <div class="appbar__actions">
-      <span class="pill" id="sourceBadge" title="Sumber data">—</span>
-      <button class="btn btn--ghost" id="btnRefresh" type="button">Muat Ulang Data</button>
-      <button class="btn btn--primary" id="btnExport" type="button">Ekspor Excel</button>
-    </div>
+
+  <a href="landing.html" class="btn btn--home">
+    ← Halaman Utama
+  </a>
+
+  <button class="btn btn--ghost" id="btnRefresh" type="button">
+    Muat Ulang Data
+  </button>
+
+  <button class="btn btn--primary" id="btnExport" type="button">
+    Ekspor Excel
+  </button>
+
+</div>
   </div>
   <nav class="tabs" role="tablist">
     <button class="tab is-active" role="tab" id="tab-overview" aria-controls="view-overview" aria-selected="true" data-view="overview">Ringkasan</button>

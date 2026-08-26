@@ -1,16 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
     mapHeader,
-    headerScore,
     normGender,
     normPendidikan,
-    normAgama,
     normPhone,
-    normHandle,
-    normUrl,
-    normalizeRecord,
     validateRecord,
-    findDuplicates,
     isBlank,
 } from '../assets/js/schema.js';
 

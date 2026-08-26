@@ -6,18 +6,23 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
-    "start": "npm run dev",
+    "start": "node server.js",
+    "photos:manifest": "node scripts/generate-photo-manifest.mjs",
+    "photos:compress": "node scripts/compress-photos.mjs",
+    "awards": "node scripts/awards-from-xlsx.mjs",
+    "awards:manifest": "node scripts/generate-awards-manifest.mjs",
     "validate": "node scripts/validate-data.mjs data/data.xlsx",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint assets/js scripts",
-    "format": "prettier --write \"assets/js/**/*.js\" \"scripts/**/*.mjs\" \"tests/**/*.js\""
+    "lint": "eslint .",
+    "format": "prettier --write ."
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.8.0",
     "prettier": "^3.9.6",
+    "sharp": "^0.35.3",
     "vitest": "^4.1.10",
     "xlsx": "^0.18.5"
   },

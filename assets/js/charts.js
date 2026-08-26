@@ -2,44 +2,73 @@
 const registry = new Map();
 
 export const PALETTE = [
-    '#1d4ed8',
-    '#0ea5e9',
-    '#0f9d58',
-    '#e8a33d',
-    '#7c3aed',
-    '#ef4444',
-    '#14b8a6',
-    '#db2777',
-    '#64748b',
-    '#84cc16',
-    '#f97316',
-    '#4f46e5',
+    '#F58220',
+    '#FFB366',
+    '#D96A00',
+    '#C62828',
+    '#F8A145',
+    '#FDBA74',
+    '#8D6E63',
 ];
 
 export function applyDefaults() {
-    if (!window.Chart) return;
+    // BUG LAMA: tidak ada penjagaan bila CDN Chart.js gagal dimuat -> ReferenceError
+    // yang menghentikan seluruh proses render.
+    if (typeof window === 'undefined' || !window.Chart) {
+        console.warn('[charts] Chart.js tidak termuat; bagian grafik dilewati.');
+        return false;
+    }
+    const { Chart } = window;
     Chart.defaults.font.family = "'Segoe UI', Inter, system-ui, sans-serif";
     Chart.defaults.font.size = 12;
     Chart.defaults.color = '#5c6a80';
     Chart.defaults.plugins.tooltip.padding = 10;
     Chart.defaults.plugins.tooltip.cornerRadius = 8;
     Chart.defaults.animation.duration = 350;
+    Chart.defaults.plugins.legend.position = 'bottom';
+    Chart.defaults.maintainAspectRatio = false;
+    return true;
 }
 
 function upsert(canvasId, config) {
-    const el = document.getElementById(canvasId);
-    if (!el) return;
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !window.Chart) return null;
+
     const existing = registry.get(canvasId);
     if (existing) {
-        existing.data = config.data;
-        existing.options = config.options;
-        existing.update();
-        return;
+        // BUG LAMA: kanvas yang sudah diganti/dihapus dari DOM tetap tersimpan di
+        // registry, sehingga update menulis ke kanvas "hantu" dan memori bocor.
+        if (existing.canvas !== canvas || !existing.canvas.isConnected) {
+            existing.destroy();
+            registry.delete(canvasId);
+        } else {
+            existing.data = config.data;
+            existing.options = config.options;
+            existing.update();
+            return existing;
+        }
     }
-    registry.set(canvasId, new Chart(el, config));
+
+    const chart = new window.Chart(canvas, config);
+    registry.set(canvasId, chart);
+    return chart;
 }
 
-const gridX = { grid: { color: '#eef1f6' }, ticks: { precision: 0 } };
+export function destroyChart(canvasId) {
+    const chart = registry.get(canvasId);
+    if (!chart) return;
+    chart.destroy();
+    registry.delete(canvasId);
+}
+
+export function destroyAll() {
+    for (const [id, chart] of registry) {
+        chart.destroy();
+        registry.delete(id);
+    }
+}
+
+const gridX = { grid: { color: '#FFE6CC' }, ticks: { precision: 0 } };
 const noLegend = { legend: { display: false } };
 
 export function barChart(id, { labels, values }, { horizontal = false, color = PALETTE[0], suffix = '' } = {}) {
@@ -70,7 +99,7 @@ export function percentBar(id, items) {
                 {
                     data: items.map((i) => i.value),
                     backgroundColor: items.map((i) =>
-                        i.value >= 80 ? '#0f9d58' : i.value >= 50 ? '#e8a33d' : '#ef4444'
+                        i.value >= 80 ? '#F58220' : i.value >= 50 ? '#F7A34B' : '#C62828'
                     ),
                     borderRadius: 6,
                     maxBarThickness: 24,
@@ -93,7 +122,17 @@ export function percentBar(id, items) {
 export function donutChart(id, { labels, values }) {
     upsert(id, {
         type: 'doughnut',
-        data: { labels, datasets: [{ data: values, backgroundColor: PALETTE, borderWidth: 2, borderColor: '#fff' }] },
+        data: {
+            labels,
+            datasets: [
+                {
+                    data: values,
+                    backgroundColor: PALETTE,
+                    borderWidth: 2,
+                    borderColor: '#FFF8F1',
+                },
+            ],
+        },
         options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -138,9 +177,4 @@ export function stackedBar(id, { rows, series }) {
             },
         },
     });
-}
-
-export function destroyAll() {
-    registry.forEach((c) => c.destroy());
-    registry.clear();
 }
