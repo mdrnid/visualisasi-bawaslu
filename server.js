@@ -502,12 +502,71 @@ app.post('/api/save-awards', requireAuth, (req, res) => {
     const awards = req.body?.awards;
     if (!Array.isArray(awards)) return res.status(400).json({ ok: false, error: 'Body harus { awards: [...] }.' });
 
+    // Validasi skema per item
+    const MAX_AWARDS_PER_PERSON = 50;
+    const MAX_PENGHARGAAN_LENGTH = 200;
+    const MAX_BUKTI_LENGTH = 500;
+    
+    const errors = [];
+    const personAwardCount = new Map();
+    
+    awards.forEach((award, idx) => {
+        if (typeof award !== 'object' || award === null) {
+            errors.push(`Item #${idx + 1}: harus berupa objek`);
+            return;
+        }
+        
+        // Field wajib
+        const nama = String(award.nama || award.Nama || '').trim();
+        const penghargaan = String(award.penghargaan || '').trim();
+        
+        if (!nama) errors.push(`Item #${idx + 1}: field 'nama' wajib diisi`);
+        if (!penghargaan) errors.push(`Item #${idx + 1}: field 'penghargaan' wajib diisi`);
+        
+        // Validasi panjang
+        if (penghargaan.length > MAX_PENGHARGAAN_LENGTH) {
+            errors.push(`Item #${idx + 1}: 'penghargaan' terlalu panjang (maks ${MAX_PENGHARGAAN_LENGTH} karakter)`);
+        }
+        
+        const bukti = String(award.bukti || '').trim();
+        if (bukti && bukti.length > MAX_BUKTI_LENGTH) {
+            errors.push(`Item #${idx + 1}: 'bukti' terlalu panjang (maks ${MAX_BUKTI_LENGTH} karakter)`);
+        }
+        
+        // Hitung penghargaan per orang
+        if (nama) {
+            const key = nama.toLowerCase();
+            personAwardCount.set(key, (personAwardCount.get(key) || 0) + 1);
+        }
+    });
+    
+    // Cek jumlah penghargaan per orang
+    for (const [nama, count] of personAwardCount) {
+        if (count > MAX_AWARDS_PER_PERSON) {
+            errors.push(`Personel '${nama}' memiliki ${count} penghargaan (maks ${MAX_AWARDS_PER_PERSON})`);
+        }
+    }
+    
+    if (errors.length > 0) {
+        return res.status(422).json({ 
+            ok: false, 
+            error: 'Validasi gagal untuk data penghargaan.',
+            errors: errors.slice(0, 10), // Batasi 10 error pertama
+            totalErrors: errors.length
+        });
+    }
+
     // Backup penghargaan.json lama
     const backupDir = path.join(__dirname, 'data', 'backup');
     fs.mkdirSync(backupDir, { recursive: true });
     if (fs.existsSync(AWARDS_FILE)) {
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
         fs.copyFileSync(AWARDS_FILE, path.join(backupDir, 'penghargaan-' + stamp + '.json'));
+        // Rotasi backup penghargaan juga (10 terakhir)
+        const awardBackups = fs.readdirSync(backupDir).filter((f) => f.startsWith('penghargaan-') && f.endsWith('.json')).sort();
+        for (const file of awardBackups.slice(0, Math.max(0, awardBackups.length - 10))) {
+            fs.unlinkSync(path.join(backupDir, file));
+        }
     }
 
     // Simpan atomik

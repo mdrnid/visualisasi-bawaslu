@@ -1059,13 +1059,25 @@ async function saveAwardsList(kabkota, nama, jabatan) {
         // Tambahkan data baru
         const finalAwards = [...filtered, ...newAwards];
         
-        await fetch('/api/save-awards', {
+        const response = await fetch('/api/save-awards', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ awards: finalAwards })
         });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            if (response.status === 422 && errorData.errors) {
+                // Validasi gagal
+                console.error('Validasi penghargaan gagal:', errorData.errors);
+                UI.toast('Gagal menyimpan penghargaan: ' + errorData.errors.slice(0, 3).join('; '), 'warn');
+            } else {
+                UI.toast('Gagal menyimpan penghargaan: ' + (errorData.error || 'Unknown error'), 'warn');
+            }
+        }
     } catch (e) {
         console.error('Gagal menyimpan penghargaan', e);
+        UI.toast('Gagal menyimpan penghargaan.', 'warn');
     }
 }
 
