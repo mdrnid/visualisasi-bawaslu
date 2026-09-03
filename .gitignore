@@ -41,7 +41,9 @@ pnpm-debug.log*
 .env.development.local
 .env.test.local
 .env.production.local
-# Local archives and startup scripts
+# Local archives
 visualisasi-bawaslu-main.rar
-start.bat
-stop.bat
+
+# Batch script logs (generated when running in background mode)
+server.log
+tunnel.log

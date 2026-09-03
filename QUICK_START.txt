@@ -1,0 +1,96 @@
+╔═══════════════════════════════════════════════════════════╗
+║         BAWASLU PROJECT - QUICK START GUIDE              ║
+╚═══════════════════════════════════════════════════════════╝
+
+📋 CARA TERCEPAT:
+   
+   Double-click: bawaslu.bat
+   (Menu lengkap untuk semua operasi)
+
+───────────────────────────────────────────────────────────
+
+🚀 MENJALANKAN SERVER:
+
+   start.bat              → Background mode (auto-close terminal)
+   start-window.bat       → Window mode (lihat log langsung)
+   start-local.bat        → Server lokal tanpa tunnel
+
+───────────────────────────────────────────────────────────
+
+🛑 MENGHENTIKAN SERVER:
+
+   stop.bat               → Hentikan semua server
+
+───────────────────────────────────────────────────────────
+
+📊 MONITORING:
+
+   status.bat             → Cek status server
+   view-logs.bat          → Lihat log realtime
+
+───────────────────────────────────────────────────────────
+
+🔗 URL AKSES:
+
+   Lokal:  http://localhost:8080
+   LAN:    http://[IP-ADDRESS]:8080
+           
+   Untuk mendapat IP: get-local-ip.bat
+
+───────────────────────────────────────────────────────────
+
+📱 AKSES DARI HP/LAPTOP LAIN (WiFi Sama):
+
+   1. Setup firewall (sekali saja):
+      → Klik kanan setup-firewall.bat
+      → Run as administrator
+   
+   2. Jalankan server:
+      → start.bat
+   
+   3. Catat IP yang muncul, misal: 192.168.1.100
+   
+   4. Di HP/laptop lain:
+      → Buka browser
+      → Ketik: http://192.168.1.100:8080
+   
+   ✓ Pastikan terhubung WiFi yang SAMA!
+
+───────────────────────────────────────────────────────────
+
+💡 TIPS:
+
+   ✓ Background mode → Server jalan walau terminal ditutup
+   ✓ Normal mode → Bisa lihat log langsung
+   ✓ Local mode → Lebih cepat, untuk development
+
+───────────────────────────────────────────────────────────
+
+❓ TROUBLESHOOTING:
+
+   Server tidak mau stop?
+   → Jalankan: taskkill /f /im node.exe
+
+   Port sudah dipakai?
+   → Jalankan stop.bat dulu
+
+   Lupa server masih jalan?
+   → Jalankan status.bat
+
+───────────────────────────────────────────────────────────
+
+📚 DOKUMENTASI LENGKAP:
+
+   SCRIPTS_GUIDE.md       → Panduan lengkap semua script
+   README.md              → Dokumentasi project
+
+───────────────────────────────────────────────────────────
+
+🎯 WORKFLOW HARIAN:
+
+   1. start.bat
+   2. Terminal auto-close, server jalan
+   3. [Coding sepuasnya]
+   4. stop.bat (kalau mau stop server)
+
+╚═══════════════════════════════════════════════════════════╝

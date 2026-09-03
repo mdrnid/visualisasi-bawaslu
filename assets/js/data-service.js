@@ -183,7 +183,7 @@ export async function loadDataset({ force = false } = {}) {
         throw new DataError('Format data dari server tidak valid.', 'Hubungi administrator.');
     }
 
-    const { grid, sheetName, lastModified } = resJson.data;
+    const { grid, sheetName, lastModified, mtime } = resJson.data;
     
     if (!grid || !Array.isArray(grid)) {
         throw new DataError('Grid data kosong.', 'Pastikan file Excel memiliki data.');
@@ -198,6 +198,7 @@ export async function loadDataset({ force = false } = {}) {
     const payload = {
         records,
         issues,
+        mtime: mtime || Date.now(), // <-- Simpan mtime untuk optimistic concurrency
         meta: {
             ...meta,
             sheetName,

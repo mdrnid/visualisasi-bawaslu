@@ -13,6 +13,36 @@ Sumber data tunggal berupa satu berkas Excel di `data/data.xlsx`.
 
 ## Menjalankan secara lokal
 
+### 🚀 Cara Tercepat (Windows):
+
+**Langsung jalankan (auto-close terminal):**
+```batch
+start.bat
+```
+Server langsung jalan di background, terminal otomatis tertutup.
+
+**Atau menggunakan Control Panel:**
+```batch
+bawaslu.bat
+```
+Menu interaktif untuk semua operasi server.
+
+**Pilihan lainnya:**
+```batch
+start-window.bat       # Lihat log di window terpisah
+start-local.bat        # Server lokal tanpa tunnel
+```
+
+**Menghentikan server:**
+```batch
+stop.bat               # Hentikan server (auto-close)
+status.bat             # Cek status server
+```
+
+> 📚 **Dokumentasi lengkap**: Lihat [SCRIPTS_GUIDE.md](SCRIPTS_GUIDE.md) atau [QUICK_START.txt](QUICK_START.txt)
+
+### 🐧 Cara Manual (Cross-platform):
+
 Jalankan perintah berikut:
 
 ```bash

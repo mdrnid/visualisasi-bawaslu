@@ -26,6 +26,7 @@ const state = {
     all: [],
     issues: [],
     meta: null,
+    mtime: null, // <-- Untuk optimistic concurrency
     version: 0,
     filters: { q: '', provinsi: '', kabkota: '', jabatan: '', gender: '', pendidikan: '', agama: '' },
     view: 'overview',
@@ -110,10 +111,11 @@ function sortForDirectory(rows) {
     return rows.slice().sort((a, b) => String(a[s] || '').localeCompare(String(b[s] || ''), 'id'));
 }
 
-function setRecords(records, { issues = state.issues, meta = state.meta } = {}) {
+function setRecords(records, { issues = state.issues, meta = state.meta, mtime = state.mtime } = {}) {
     state.all = records;
     state.issues = issues;
     state.meta = meta;
+    state.mtime = mtime; // <-- Simpan mtime
     state.version += 1;
     _lastFilterKey = '';
 }
@@ -1120,7 +1122,13 @@ async function saveData() {
         state.all.unshift(newRecord);
     }
 
-    await syncToServer();
+    const saved = await syncToServer();
+    if (!saved) {
+        // syncToServer sudah tampilkan error/konflik, jangan tutup modal
+        UI.showState('hidden');
+        return;
+    }
+    
     closeModal();
     // Panggil reload supaya data penghargaan termuat kembali dan ngelink dengan benar
     await reload({ force: true });
@@ -1134,26 +1142,48 @@ async function syncToServer() {
             // Schema FOTO tidak visible secara default, jadi kita harus sertakan explicitly
             // karena ada field.hidden = true pada foto
             VISIBLE_FIELDS.forEach((f) => {
-                obj[f.label] = r[f.key] ?? '';
+                obj[f.key] = r[f.key] ?? '';
             });
             // Manual assign hidden fields
-            obj['FOTO'] = r.foto ?? '';
+            obj['foto'] = r.foto ?? '';
             return obj;
         });
         
         const response = await fetch('/api/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rows })
+            body: JSON.stringify({ rows, baseMtime: state.mtime })
         });
         const resData = await response.json();
         
-        if (!response.ok) {
-            UI.toast('Gagal menyimpan ke file Excel: ' + (resData.error || 'Unknown error'), 'warn');
+        if (response.status === 409) {
+            // Conflict: data sudah berubah oleh pengguna lain
+            const shouldReload = window.confirm(
+                resData.error + '\n\n' + 
+                (resData.hint || 'Muat ulang data dulu, lalu ulangi perubahan Anda.') + 
+                '\n\nKlik OK untuk muat ulang data sekarang.'
+            );
+            if (shouldReload) {
+                await reload({ force: true });
+            }
+            return false;
         }
+        
+        if (!response.ok) {
+            UI.toast('Gagal menyimpan ke file Excel: ' + (resData.error || 'Unknown error'), 'error');
+            return false;
+        }
+        
+        // Update mtime setelah berhasil simpan
+        if (resData.mtime) {
+            state.mtime = resData.mtime;
+        }
+        
+        return true;
     } catch (e) {
         console.error(e);
-        UI.toast('Kesalahan koneksi saat menyimpan.', 'warn');
+        UI.toast('Kesalahan koneksi saat menyimpan.', 'error');
+        return false;
     }
 }
 
@@ -1478,13 +1508,13 @@ async function reload({ force = false } = {}) {
     );
     try {
         // OPTIMASI: Load dataset dan awards secara parallel
-        const [{ records, issues, meta, fromCache }, awards] = await Promise.all([
+        const [{ records, issues, meta, mtime, fromCache }, awards] = await Promise.all([
             loadDataset({ force }),
             loadAwards({ force })
         ]);
         
         const linkage = attachAwards(records, awards);
-        setRecords(records, { issues, meta });
+        setRecords(records, { issues, meta, mtime }); // <-- Pass mtime
 
         const appName = $('#appName');
         const appOrg = $('#appOrg');

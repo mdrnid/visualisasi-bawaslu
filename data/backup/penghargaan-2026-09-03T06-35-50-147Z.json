@@ -28,6 +28,33 @@
     },
     {
         "kabkota": "Kabupaten Bone",
+        "nama": "Dr. Nur Alim, S.H., M.H.Kes",
+        "jabatan": "Anggota",
+        "kordiv": "Penanganan Pelanggaran Data & Informasi",
+        "wakordiv": "Hukum & Penyelesaian Sengketa",
+        "penghargaan": "Penanganan Perkara Pidana Terbanyak Tingkat Kabupaten/Kota",
+        "bukti": "assets/awards/bone/dr-nur-alim/PHOTO-2026-03-08-16-29-28.pdf"
+    },
+    {
+        "kabkota": "Kabupaten Bone",
+        "nama": "Dr. Nur Alim, S.H., M.H.Kes",
+        "jabatan": "Anggota",
+        "kordiv": "Penanganan Pelanggaran Data & Informasi",
+        "wakordiv": "Hukum & Penyelesaian Sengketa",
+        "penghargaan": "Narasumber Pendidikan Pengawas Partisipatif Tahun 2026",
+        "bukti": "assets/awards/bone/dr-nur-alim/SULAWESI SELATAN_Kabupaten Bone_Narasumber_Dr.Nur Alim,S.H.,M.H.Kes-1.pdf"
+    },
+    {
+        "kabkota": "Kabupaten Bone",
+        "nama": "Dr. Nur Alim, S.H., M.H.Kes",
+        "jabatan": "Anggota",
+        "kordiv": "Penanganan Pelanggaran Data & Informasi",
+        "wakordiv": "Hukum & Penyelesaian Sengketa",
+        "penghargaan": "Narasumber Kursus Hukum Pemilu",
+        "bukti": "assets/awards/bone/dr-nur-alim/SERTIFIKAT Dr.NUR ALIM.pdf.pdf"
+    },
+    {
+        "kabkota": "Kabupaten Bone",
         "nama": "Alwi, S.E., S.H",
         "jabatan": "Ketua",
         "kordiv": "Ketua",
@@ -141,29 +168,5 @@
         "penghargaan": "Responden Eksper/Ahli dalam Kegiatan Survei Penilaian Integritas (SPI) 2025",
         "bukti": "assets/awards/jeneponto/bustanil-nassa/WhatsApp Image 2026-08-20 at 11.06.18.jpeg",
         "kategori": "Responden"
-    },
-    {
-        "kabkota": "Bone",
-        "nama": "Nur Alim. Sh.,mh.Kes",
-        "jabatan": "ANGGOTA",
-        "penghargaan": "Penanganan Perkara Pidana Terbanyak Tingkat Kabupaten/Kota",
-        "bukti": "assets/awards/bone/dr-nur-alim/PHOTO-2026-03-08-16-29-28.pdf",
-        "kategori": "Prestasi"
-    },
-    {
-        "kabkota": "Bone",
-        "nama": "Nur Alim. Sh.,mh.Kes",
-        "jabatan": "ANGGOTA",
-        "penghargaan": "Narasumber Kursus Hukum Pemilu",
-        "bukti": "assets/awards/bone/dr-nur-alim/SERTIFIKAT Dr.NUR ALIM.pdf.pdf",
-        "kategori": "Narasumber"
-    },
-    {
-        "kabkota": "Bone",
-        "nama": "Nur Alim. Sh.,mh.Kes",
-        "jabatan": "ANGGOTA",
-        "penghargaan": "Narasumber Pendidikan Pengawas Partisipatif Tahun 2026",
-        "bukti": "assets/awards/bone/dr-nur-alim/SULAWESI SELATAN_Kabupaten Bone_Narasumber_Dr.Nur Alim,S.H.,M.H.Kes-1.pdf",
-        "kategori": "Narasumber"
     }
 ]

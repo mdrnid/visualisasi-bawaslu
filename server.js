@@ -250,7 +250,7 @@ app.get('/api/data', requireAuth, (req, res) => {
         if (cachedDataGrid && mtime === lastDataModTime) {
             console.log('[cache] ✓ Memory cache HIT');
             res.setHeader('X-Cache', 'HIT-MEMORY');
-            return res.json({ ok: true, data: cachedDataGrid });
+            return res.json({ ok: true, data: { ...cachedDataGrid, mtime } });
         }
         
         // 2. Cek persistent cache
@@ -259,7 +259,7 @@ app.get('/api/data', requireAuth, (req, res) => {
             cachedDataGrid = persistentCache;
             lastDataModTime = mtime;
             res.setHeader('X-Cache', 'HIT-DISK');
-            return res.json({ ok: true, data: cachedDataGrid });
+            return res.json({ ok: true, data: { ...cachedDataGrid, mtime } });
         }
         
         // 3. Parse Excel (cache MISS)
@@ -276,7 +276,7 @@ app.get('/api/data', requireAuth, (req, res) => {
         
         const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '', raw: false });
         
-        cachedDataGrid = { grid, sheetName, lastModified: new Date(mtime).toISOString() };
+        cachedDataGrid = { grid, sheetName, lastModified: new Date(mtime).toISOString(), mtime };
         lastDataModTime = mtime;
         
         // Simpan ke persistent cache
@@ -292,6 +292,19 @@ app.get('/api/data', requireAuth, (req, res) => {
     } catch (err) {
         console.error('[server] gagal membaca excel:', err);
         res.status(500).json({ ok: false, error: 'Gagal membaca data Excel.' });
+    }
+});
+
+// Endpoint ringan untuk mendapatkan mtime saja (untuk concurrency check)
+app.get('/api/data-mtime', requireAuth, (req, res) => {
+    try {
+        if (!fs.existsSync(DATA_FILE)) {
+            return res.status(404).json({ ok: false, error: 'Berkas data tidak ditemukan.' });
+        }
+        const mtime = fs.statSync(DATA_FILE).mtimeMs;
+        res.json({ ok: true, mtime });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: 'Gagal membaca mtime.' });
     }
 });
 
@@ -320,6 +333,8 @@ function rotateBackups(keep = 10) {
 
 app.post('/api/save', requireAuth, (req, res) => {
     const rows = req.body && req.body.rows;
+    const baseMtime = req.body && req.body.baseMtime; // Optimistic concurrency control
+    
     if (!Array.isArray(rows)) return res.status(400).json({ ok: false, error: 'Body harus { rows: [...] }.' });
     if (rows.length === 0) return res.status(400).json({ ok: false, error: 'Tidak ada baris untuk disimpan.' });
     if (rows.length > MAX_ROWS) {
@@ -327,6 +342,19 @@ app.post('/api/save', requireAuth, (req, res) => {
     }
     if (rows.some((r) => typeof r !== 'object' || r === null || Array.isArray(r))) {
         return res.status(400).json({ ok: false, error: 'Setiap baris harus berupa objek.' });
+    }
+
+    // Optimistic concurrency: periksa apakah file sudah berubah sejak klien terakhir membaca
+    if (baseMtime && fs.existsSync(DATA_FILE)) {
+        const currentMtime = fs.statSync(DATA_FILE).mtimeMs;
+        if (currentMtime !== baseMtime) {
+            return res.status(409).json({ 
+                ok: false, 
+                error: 'Data di server sudah berubah oleh pengguna lain.',
+                hint: 'Muat ulang data terlebih dahulu, lalu ulangi perubahan Anda.',
+                currentMtime 
+            });
+        }
     }
 
     const data = rows.map(toExcelRow);
@@ -352,7 +380,8 @@ app.post('/api/save', requireAuth, (req, res) => {
     lastDataModTime = 0;
     invalidatePersistentCache();
 
-    res.json({ ok: true, rows: data.length, savedAt: new Date().toISOString() });
+    const newMtime = fs.statSync(DATA_FILE).mtimeMs;
+    res.json({ ok: true, rows: data.length, savedAt: new Date().toISOString(), mtime: newMtime });
 });
 
 // ---------- Upload Foto Personel ----------
