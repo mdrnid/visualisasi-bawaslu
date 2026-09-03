@@ -1,8 +1,16 @@
 node_modules/
-data/data.xlsx
 .DS_Store
 coverage/
 project_evaluation.md
+
+# PII (Personally Identifiable Information) - WAJIB di .gitignore
+data/data.xlsx
+data/.data-cache.json
+data/backup/
+data/migrations/
+data/penghargaan.json
+assets/personel/*.webp
+assets/awards/*/
 
 # Project-specific non-system files
 PROJECT_CODEBASE.md
@@ -41,6 +49,7 @@ pnpm-debug.log*
 .env.development.local
 .env.test.local
 .env.production.local
+
 # Local archives
 visualisasi-bawaslu-main.rar
 

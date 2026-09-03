@@ -54,8 +54,18 @@ const KEY_TO_COLUMN = {
 
 const app = express();
 const PORT = Number(process.env.PORT || 8080);
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = process.env.HOST || '127.0.0.1'; // Default loopback (aman)
 const APP_TOKEN = process.env.APP_TOKEN || '';
+
+// Validasi keamanan: Paksa APP_TOKEN bila HOST bukan loopback
+const isLoopback = HOST === '127.0.0.1' || HOST === 'localhost' || HOST === '::1';
+if (!isLoopback && !APP_TOKEN) {
+    console.error('FATAL: APP_TOKEN wajib diisi bila HOST bukan loopback (127.0.0.1/localhost).');
+    console.error(`       HOST saat ini: ${HOST}`);
+    console.error('       Set APP_TOKEN di environment variable atau ubah HOST ke 127.0.0.1');
+    process.exit(1);
+}
+
 const DATA_FILE = path.join(__dirname, 'data', 'data.xlsx');
 const DATA_CACHE_FILE = path.join(__dirname, 'data', '.data-cache.json');
 const AWARDS_FILE = path.join(__dirname, 'data', 'penghargaan.json');
@@ -142,27 +152,85 @@ function isAuthed(req) {
 
 function requireAuth(req, res, next) {
     if (isAuthed(req)) return next();
-    res.status(401).type('text/plain').send('Tidak diizinkan. Buka /login?token=... lebih dulu.');
+    res.status(401).type('text/plain').send('Tidak diizinkan. POST ke /api/login dengan body {token: "..."} untuk autentikasi.');
 }
 
-app.get('/login', (req, res) => {
-    if (!APP_TOKEN) return res.redirect('/');
-    if (!safeEqual(req.query.token || '', APP_TOKEN)) {
-        return res.status(401).type('text/plain').send('Token salah.');
+// Login endpoint: POST dengan body JSON (bukan query string)
+app.post('/api/login', express.json(), (req, res) => {
+    if (!APP_TOKEN) {
+        return res.status(400).json({ ok: false, error: 'APP_TOKEN tidak dikonfigurasi di server.' });
     }
+    
+    const token = req.body?.token || '';
+    if (!safeEqual(token, APP_TOKEN)) {
+        return res.status(401).json({ ok: false, error: 'Token salah.' });
+    }
+    
     res.cookie('sid', SESSION_VALUE, {
         httpOnly: true,
         sameSite: 'lax',
         secure: Boolean(process.env.HTTPS),
         maxAge: 12 * 60 * 60 * 1000,
     });
-    res.redirect('/');
+    
+    res.json({ ok: true, message: 'Login berhasil', expiresIn: 12 * 60 * 60 * 1000 });
+});
+
+// Legacy GET /login untuk backward compatibility (redirect ke halaman login form)
+app.get('/login', (req, res) => {
+    if (!APP_TOKEN) return res.redirect('/');
+    // TODO: Redirect ke halaman login.html (akan dibuat di fase berikutnya)
+    res.status(200).type('text/html').send(`
+        <!DOCTYPE html>
+        <html><head><meta charset="utf-8"><title>Login</title></head>
+        <body style="font-family:sans-serif;max-width:400px;margin:50px auto;padding:20px;">
+            <h2>Login</h2>
+            <form id="form">
+                <label>Token: <input type="password" id="token" required style="width:100%;padding:8px;margin:10px 0;"></label><br>
+                <button type="submit" style="padding:10px 20px;background:#007bff;color:white;border:none;cursor:pointer;">Login</button>
+            </form>
+            <script>
+                document.getElementById('form').onsubmit = async (e) => {
+                    e.preventDefault();
+                    const token = document.getElementById('token').value;
+                    const res = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({token})
+                    });
+                    if (res.ok) window.location = '/';
+                    else alert('Token salah');
+                };
+            </script>
+        </body></html>
+    `);
 });
 
 // ---------- Berkas statis: whitelist, bukan seluruh folder ----------
+// Assets publik (CSS, JS, image bawaslu.png)
 app.use(
-    '/assets',
-    express.static(path.join(__dirname, 'assets'), { index: false, dotfiles: 'deny', maxAge: 0 })
+    '/assets/css',
+    express.static(path.join(__dirname, 'assets', 'css'), { index: false, dotfiles: 'deny', maxAge: 0 })
+);
+app.use(
+    '/assets/js',
+    express.static(path.join(__dirname, 'assets', 'js'), { index: false, dotfiles: 'deny', maxAge: 0 })
+);
+app.use(
+    '/assets/image',
+    express.static(path.join(__dirname, 'assets', 'image'), { index: false, dotfiles: 'deny', maxAge: 0 })
+);
+
+// Assets yang butuh auth: foto personel & penghargaan (PII)
+app.use(
+    '/assets/personel',
+    requireAuth,
+    express.static(path.join(__dirname, 'assets', 'personel'), { index: false, dotfiles: 'deny', maxAge: 0 })
+);
+app.use(
+    '/assets/awards',
+    requireAuth,
+    express.static(path.join(__dirname, 'assets', 'awards'), { index: false, dotfiles: 'deny', maxAge: 0 })
 );
 
 const page = (file) => (req, res) => res.sendFile(path.join(__dirname, file));
@@ -484,6 +552,21 @@ app.post('/api/upload-photo', requireAuth, upload.single('photo'), async (req, r
         if (!nama) return res.status(400).json({ ok: false, error: 'Nama personel wajib diisi.' });
         if (!req.file) return res.status(400).json({ ok: false, error: 'Berkas foto tidak ditemukan.' });
 
+        // Verifikasi magic bytes: hanya terima JPEG, PNG, WebP, GIF
+        const buffer = req.file.buffer;
+        const magicBytes = buffer.slice(0, 12);
+        const isJPEG = magicBytes[0] === 0xFF && magicBytes[1] === 0xD8 && magicBytes[2] === 0xFF;
+        const isPNG = magicBytes[0] === 0x89 && magicBytes[1] === 0x50 && magicBytes[2] === 0x4E && magicBytes[3] === 0x47;
+        const isWebP = magicBytes[8] === 0x57 && magicBytes[9] === 0x45 && magicBytes[10] === 0x42 && magicBytes[11] === 0x50;
+        const isGIF = magicBytes[0] === 0x47 && magicBytes[1] === 0x49 && magicBytes[2] === 0x46;
+
+        if (!isJPEG && !isPNG && !isWebP && !isGIF) {
+            return res.status(400).json({ 
+                ok: false, 
+                error: 'Format file tidak valid. Hanya JPEG, PNG, WebP, atau GIF yang diterima.' 
+            });
+        }
+
         const slug = slugify(nama);
         if (!slug) return res.status(400).json({ ok: false, error: 'Nama tidak valid untuk slug.' });
 
@@ -493,7 +576,7 @@ app.post('/api/upload-photo', requireAuth, upload.single('photo'), async (req, r
         const destPath = path.join(PHOTO_DIR, filename);
 
         // Konversi ke WebP, resize maksimal 400x400, kualitas 80
-        await sharp(req.file.buffer)
+        await sharp(buffer)
             .resize(400, 400, { fit: 'cover', position: 'top' })
             .webp({ quality: 80 })
             .toFile(destPath);

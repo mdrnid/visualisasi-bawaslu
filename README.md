@@ -103,7 +103,41 @@ Untuk menambah kolom baru atau mengubah urutan, edit **satu sumber kebenaran** d
 
 ## Keamanan & Privasi (UU PDP)
 
-Berkas Excel berisi data pribadi (nomor telepon, e-mail). Bila di-deploy ke internet publik, Anda **WAJIB**:
-1. Mengaktifkan HTTPS.
-2. Memasang autentikasi (Basic Auth, SSO, atau VPN kantor) di web server (misalnya Nginx atau Apache).
-3. Melindungi akses fisik dan digital ke berkas `data/data.xlsx`.
+Aplikasi ini menangani **data pribadi** (PII): nama, nomor telepon, email, foto personel, dan sertifikat penghargaan.
+
+### Keamanan Built-in
+
+- **Token autentikasi**: `APP_TOKEN` wajib diisi bila server diakses dari jaringan (HOST bukan 127.0.0.1). Server menolak start bila aturan ini dilanggar.
+- **Auth untuk aset PII**: Foto personel (`/assets/personel/`) dan penghargaan (`/assets/awards/`) memerlukan autentikasi.
+- **Login aman**: POST `/api/login` dengan body JSON (bukan query string di URL yang ter-log di access log).
+- **Upload validation**: Magic bytes verification untuk mencegah upload file berbahaya yang menyamar sebagai gambar.
+- **Atomic writes**: Backup otomatis sebelum setiap perubahan data, tulis ke temp file lalu rename (atomik).
+
+### Deployment ke Jaringan LAN
+
+Bila di-deploy ke LAN kantor:
+
+1. **Set APP_TOKEN** di environment variable:
+   ```bash
+   APP_TOKEN="token-rahasia-anda" HOST=0.0.0.0 npm start
+   ```
+
+2. **Gunakan HTTPS** (wajib untuk production):
+   - Pasang reverse proxy (Nginx/Apache) dengan TLS certificate
+   - Atau set `HTTPS=true` bila deploy di platform yang support
+
+3. **Git history PII**: Bila repo akan di-share, bersihkan history PII dari git:
+   ```bash
+   # PERINGATAN: operasi ini destructive, backup dulu!
+   git filter-branch --force --index-filter \
+     "git rm --cached --ignore-unmatch data/data.xlsx data/penghargaan.json assets/personel/*.webp assets/awards/*" \
+     --prune-empty --tag-name-filter cat -- --all
+   ```
+
+4. **VPN atau IP Whitelist**: Batasi akses hanya dari IP kantor menggunakan firewall atau reverse proxy.
+
+### Catatan Penting
+
+- File PII sudah ada di `.gitignore`, tapi **history lama** mungkin masih berisi data sensitif
+- Default HOST adalah `127.0.0.1` (loopback) untuk keamanan maksimal
+- Jangan expose server ke internet publik tanpa HTTPS + autentikasi tambahan (SSO/VPN)
