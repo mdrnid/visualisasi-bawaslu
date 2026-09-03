@@ -266,7 +266,8 @@ app.get('/api/data', requireAuth, (req, res) => {
         console.log('[cache] ✗ Cache MISS - Parsing Excel...');
         const startTime = Date.now();
         
-        const workbook = XLSX.readFile(DATA_FILE, { cellDates: true });
+        // PERBAIKAN: cellDates + raw: true untuk preserve tipe data asli
+        const workbook = XLSX.readFile(DATA_FILE, { cellDates: true, cellNF: false, cellText: false });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         
@@ -274,7 +275,8 @@ app.get('/api/data', requireAuth, (req, res) => {
             return res.status(500).json({ ok: false, error: 'Sheet tidak ditemukan.' });
         }
         
-        const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '', raw: false });
+        // raw: true mempertahankan tipe asli (number tetap number, date tetap date)
+        const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '', raw: true });
         
         cachedDataGrid = { grid, sheetName, lastModified: new Date(mtime).toISOString(), mtime };
         lastDataModTime = mtime;
@@ -314,11 +316,41 @@ app.use(express.json({ limit: '1mb' }));
 function toExcelRow(row) {
     const out = {};
     for (const col of EXCEL_COLUMNS) out[col] = '';
+    
     for (const [key, value] of Object.entries(row)) {
         if (key.startsWith('_') || value === null || value === undefined) continue;
         const col = KEY_TO_COLUMN[key] || (EXCEL_COLUMNS.includes(key) ? key : null);
         if (!col) continue; // kolom tak dikenal diabaikan, tidak ditulis mentah
-        out[col] = String(value).slice(0, MAX_CELL_LENGTH);
+        
+        // PERBAIKAN: Preserve tipe data untuk kolom tertentu
+        if (col === 'NO' || col === 'NO URUT') {
+            // Kolom nomor: pastikan sebagai number
+            const num = Number(value);
+            out[col] = Number.isNaN(num) ? '' : num;
+        } else if (col === 'AMJ') {
+            // Kolom tanggal: konversi ke ISO date string konsisten (YYYY-MM-DD)
+            if (value instanceof Date) {
+                out[col] = value.toISOString().split('T')[0];
+            } else if (typeof value === 'string' && value.trim()) {
+                // Parsing string date
+                const parsed = new Date(value);
+                if (!isNaN(parsed.getTime())) {
+                    out[col] = parsed.toISOString().split('T')[0];
+                } else {
+                    // Fallback: simpan as-is bila tidak bisa diparsing
+                    out[col] = String(value).slice(0, MAX_CELL_LENGTH);
+                }
+            } else if (typeof value === 'number') {
+                // Excel serial date number
+                const date = XLSX.SSF.parse_date_code(value);
+                out[col] = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+            } else {
+                out[col] = '';
+            }
+        } else {
+            // Kolom teks: tetap sebagai string, potong bila terlalu panjang
+            out[col] = String(value).slice(0, MAX_CELL_LENGTH);
+        }
     }
     return out;
 }
