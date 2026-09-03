@@ -919,7 +919,7 @@ function openModal(id = null) {
                 console.log('[openModal] Loading foto:', rec.foto);
                 
                 // Hide initials immediately
-                initials.style.display = 'none';
+                if (initials) initials.style.display = 'none';
                 
                 const img = document.createElement('img');
                 img.className = 'avatar__img';
@@ -929,25 +929,33 @@ function openModal(id = null) {
                 img.style.width = '100%';
                 img.style.height = '100%';
                 img.style.objectFit = 'cover';
+                img.style.objectPosition = 'center top';
                 
                 img.onload = () => {
-                    console.log('[openModal] Foto loaded successfully');
+                    console.log('[openModal] ✓ Foto loaded:', rec.foto);
+                    photoPreview.classList.add('has-photo');
                 };
                 
                 img.onerror = (e) => {
-                    console.error('[openModal] Foto gagal dimuat:', rec.foto, e);
+                    console.error('[openModal] ✗ Foto gagal dimuat:', rec.foto, e);
+                    console.log('[openModal] Attempting without leading slash...');
                     img.remove();
-                    initials.style.display = 'flex';
+                    if (initials) initials.style.display = 'flex';
+                    photoPreview.classList.remove('has-photo');
                 };
                 
                 photoPreview.style.position = 'relative';
                 photoPreview.appendChild(img);
                 
                 // Set src AFTER appending to DOM
-                img.src = rec.foto;
+                // Add leading slash if not present
+                const photoPath = rec.foto.startsWith('/') ? rec.foto : '/' + rec.foto;
+                console.log('[openModal] Loading from path:', photoPath);
+                img.src = photoPath;
             } else {
                 console.log('[openModal] Tidak ada foto, tampilkan inisial');
-                initials.style.display = 'flex';
+                if (initials) initials.style.display = 'flex';
+                photoPreview.classList.remove('has-photo');
             }
 
             // Copy awards

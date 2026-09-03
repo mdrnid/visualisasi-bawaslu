@@ -285,6 +285,19 @@ export function normalizeRecord(raw, index, cc = '62') {
         }
     }
     
+    // Fallback: jika path foto tidak dimulai dengan 'assets/', tambahkan prefix
+    if (rec.foto && !rec.foto.startsWith('assets/')) {
+        rec.foto = 'assets/personel/' + rec.foto;
+    }
+    
+    // Ensure .webp extension
+    if (rec.foto && !rec.foto.endsWith('.webp') && !rec.foto.includes('.jpg') && !rec.foto.includes('.png')) {
+        rec.foto = rec.foto.replace(/\.(jpg|jpeg|png)$/i, '.webp');
+        if (!rec.foto.endsWith('.webp')) {
+            rec.foto += '.webp';
+        }
+    }
+    
     // Perbaikan: jika kabkota sama dengan provinsi, ubah menjadi format "Provinsi [Nama]"
     // untuk membedakan data Bawaslu Provinsi dengan Kabupaten/Kota
     if (rec.provinsi && rec.kabkota && 
