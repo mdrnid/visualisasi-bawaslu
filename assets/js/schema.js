@@ -161,7 +161,7 @@ export const isBlank = (v) => {
 };
 
 export function normGender(v) {
-    const n = slug(v);
+    const n = slugHeader(v);
     if (!n) return '';
     const MALE = ['LAKILAKI', 'PRIA', 'MALE'];
     const FEMALE = ['PEREMPUAN', 'WANITA', 'FEMALE'];
@@ -171,7 +171,7 @@ export function normGender(v) {
 }
 
 export function normPendidikan(v) {
-    const n = slug(v);
+    const n = slugHeader(v);
     if (!n) return '';
     if (n.includes('S3') || n.includes('DOKTOR')) return 'S3';
     if (n.includes('S2') || n.includes('MAGISTER')) return 'S2';
@@ -182,7 +182,7 @@ export function normPendidikan(v) {
 }
 
 export function normAgama(v) {
-    const n = slug(v);
+    const n = slugHeader(v);
     const map = {
         ISLAM: 'Islam',
         MUSLIM: 'Islam',
@@ -303,7 +303,7 @@ export function normalizeRecord(raw, index, cc = '62') {
     // Perbaikan: jika kabkota sama dengan provinsi, ubah menjadi format "Provinsi [Nama]"
     // untuk membedakan data Bawaslu Provinsi dengan Kabupaten/Kota
     if (rec.provinsi && rec.kabkota && 
-        slug(rec.provinsi) === slug(rec.kabkota)) {
+        slugHeader(rec.provinsi) === slugHeader(rec.kabkota)) {
         rec.kabkota = 'Provinsi ' + rec.provinsi;
     }
     const filled = COMPLETENESS_KEYS.filter((k) => rec[k]).length;
