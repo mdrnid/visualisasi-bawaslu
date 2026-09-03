@@ -1,174 +1,185 @@
 # Changelog
 
-## [Unreleased]
+Semua perubahan penting pada proyek ini didokumentasikan di file ini.
 
-### Added ✨
+## [2.0.0] - 2026-09-03
 
-**UI Improvement: Form Penghargaan yang Lebih Simpel & User-Friendly**
+### 🔒 Keamanan Data (P0)
 
-Form penghargaan telah didesain ulang dengan fokus pada simplicity dan usability:
+#### Optimistic Concurrency
+- Implementasi optimistic concurrency control di `/api/save`
+- Server memvalidasi `baseMtime` sebelum write
+- Return 409 conflict bila data sudah berubah
+- Klien menampilkan dialog reload dengan opsi force save
 
-#### **Perubahan Major:**
-1. **Simplified Fields** - Hanya 2 field:
-   - Nama Penghargaan (required)
-   - Upload PDF Bukti (optional)
-   - ✗ Removed: Koordinator Divisi, Wakil Koordinator, input URL manual
+#### Guard Hapus Massal
+- Validasi di klien: deteksi kehilangan >20% baris
+- Dialog konfirmasi dengan list nama yang akan dihapus
+- Server reject bila kehilangan >20% tanpa flag `confirmBulkDelete`
 
-2. **Card-Based Design**:
-   - Penghargaan ditampilkan sebagai **card** yang modern
-   - **Display mode**: Hanya tampilkan info penting (nama + link PDF)
-   - **Edit mode**: Form input muncul saat klik tombol edit
-   - Badge numbering (#1, #2, dst) untuk identifikasi cepat
+#### Validasi Penghargaan
+- Validasi field wajib, panjang max, count per personel
+- Rotasi backup `penghargaan.json` (10 file terakhir)
+- Return 422 dengan detail error bila validasi gagal
 
-3. **Better Actions**:
-   - ✎ **Edit button** dengan icon pencil yang jelas
-   - 🗑 **Delete button** dengan icon trash + konfirmasi
-   - Tombol terpisah antara Save edit (per-award) vs Save form (submit semua)
+#### Round-trip Excel
+- Parse dengan `raw:true` untuk preserve tipe data
+- NO sebagai number, AMJ ke ISO date YYYY-MM-DD
+- Unit test untuk verifikasi type preservation
 
-4. **Visual Feedback**:
-   - Hover effect pada card (border orange + shadow)
-   - Link PDF dengan icon dan hover animation
-   - Empty state yang friendly ("✨ Belum ada penghargaan")
-   - Toast notification untuk setiap action
+#### Dependencies
+- `xlsx` dan `sharp` dipindah dari devDependencies ke dependencies
+- Mendukung `npm ci --omit=dev` untuk production build
 
-5. **UX Improvements**:
-   - Auto-focus ke input nama saat tambah penghargaan baru
-   - Konfirmasi "Yakin hapus?" sebelum delete
-   - File indicator jika PDF sudah ada ("📄 File tersimpan")
-   - Responsive design untuk mobile
+### 📊 Integritas Skema (P0)
 
-#### **Technical Details:**
-- **Card Styling**: Gradient header, rounded corners, shadow on hover
-- **State Management**: `_editing` flag untuk toggle edit mode
-- **File Handling**: `_pendingFile` untuk store file sebelum upload
-- **Animation**: Smooth transitions, fade-in effects
+#### Kolom ID Stabil
+- Kolom ID (format `PRS-0001`, `PRS-0002`, dll) sebagai identifier unik
+- assignStableIds() generate/preserve ID dari Excel
+- Skrip migrasi `migrate-add-id.mjs` (idempoten, dengan backup)
+- Skrip audit `reconcile-assets.mjs` (foto & awards vs Excel)
 
-**Files Modified**:
-- `assets/js/app.js`: `renderAwardsForm()`, event handlers
-- `assets/css/styles.css`: Award card styles (~200 lines)
-- `UI_IMPROVEMENTS.md`: Dokumentasi lengkap
+#### Satu Sumber Kebenaran
+- EXCEL_COLUMNS dan KEY_TO_EXCEL_COLUMN di `schema.js`
+- Server dan klien import dari schema.js
+- README update untuk cocok dengan implementasi
+
+#### Manifest Otomatis
+- Generate manifest foto & awards saat server startup
+- Hapus script manual `photos:manifest` dan `awards:manifest`
+- Manifest: `assets/personel/index.json` dan `assets/awards/index.json`
+
+#### Validasi di /api/save
+- Import `validateRecord` dari schema.js
+- Validasi field wajib, format email, dll sebelum write
+- Return 422 dengan detail issues (max 10)
+
+### 🔐 Keamanan LAN (P1)
+
+#### Paksa APP_TOKEN
+- Server exit 1 bila HOST bukan loopback dan APP_TOKEN kosong
+- Default HOST = 127.0.0.1 (loopback, aman)
+- Validasi keamanan di startup
+
+#### Auth untuk Aset PII
+- `/assets/personel/` dan `/assets/awards/` butuh auth
+- Assets publik (CSS, JS, logo) tetap accessible
+- Foto & sertifikat terlindungi
+
+#### Magic Bytes Validation
+- Upload foto: verifikasi magic bytes untuk JPEG/PNG/WebP/GIF
+- Reject file berbahaya yang menyamar sebagai gambar
+- Return 400 bila format tidak valid
+
+#### Login via POST
+- Endpoint login: POST `/api/login` dengan body JSON
+- Cookie httpOnly, sameSite=lax, 12 jam expiry
+- Halaman login HTML form (`login.html`)
+
+#### .gitignore PII
+- Tambah semua file PII: data.xlsx, backup/, foto, awards
+- Cache files: .data-cache.json, migrations/
+- README: dokumentasi cara bersihkan git history
+
+#### CSP Headers
+- Content Security Policy strict untuk LAN deployment
+- default-src 'self', no inline scripts
+- style-src 'unsafe-inline' sementara (akan diperbaiki)
+
+### 🎨 UI Responsif (P1)
+
+#### CSS Refactor
+- Design tokens unified (hapus duplikasi `--r/--radius`, `--sh/--shadow`)
+- Konsisten naming untuk semua variables
+- Group logis: colors, brand, semantic, borders, shadows, motion
+
+#### Accessibility
+- Tab dengan focus ring visible (`outline: 2px solid var(--brand)`)
+- `@media (hover: hover)` untuk batasi hover effects di touch devices
+- `prefers-reduced-motion` support untuk disable animations
+- Keyboard navigation untuk semua interactive elements
+
+#### Responsive Layout
+- Filter bar: responsive grid adaptif (auto-fit minmax)
+- Directory cards: minmax(280px, 1fr)
+- Charts: minmax(340px, 1fr)
+- Mobile breakpoint: 720px
+
+#### Avatar System
+- Unified avatar component dengan size modifiers (sm, md, lg, xl)
+- Fallback: initials dari nama
+- Smooth fade-in animation untuk foto
+- Tanpa inline styles
+
+#### Table Improvements
+- Sticky first column (NO) dengan z-index layering
+- Sticky header dengan proper background
+- Empty state message
+- Responsive horizontal scroll
+
+#### Modal
+- Full screen modal untuk Add Data form
+- Sticky header & footer
+- Max-width 1200px untuk readability
+- Mobile responsive padding
+
+### 🔄 Flow Fitur
+
+#### Login Flow
+- Halaman login HTML form dengan UX modern
+- Loading state dengan spinner
+- Error handling dengan alert messages
+- Auto-focus input token
+
+#### Stats API
+- GET `/api/stats` tanpa auth untuk landing page
+- Return: total personel, by gender, last update
+- Tidak expose PII
+
+#### Normalisasi Input
+- Schema.js: normalizeRecord() untuk semua input
+- Phone: format 62xxxxxxxxxx
+- Email: validasi format
+- Handle: extract dari URL sosial media
+
+### 🚀 Deployment
+
+#### Offline Support
+- Dependencies lokal (npm install offline dari cache)
+- Manifest auto-generate (tidak perlu npm run manual)
+- Static assets self-hosted
+
+#### Production Ready
+- Atomic writes dengan backup (10 rotasi)
+- Gzip compression untuk semua responses
+- Security headers lengkap (CSP, X-Frame-Options, dll)
+- Logging dengan timestamp
+
+### 📝 Dokumentasi
+
+#### README
+- Dokumentasi keamanan lengkap
+- Cara deployment ke LAN dengan APP_TOKEN
+- Instruksi bersihkan git history PII
+- Kolom ID dan cara migrasi
+
+#### Scripts
+- `npm run migrate:add-id` - Tambah kolom ID ke data.xlsx
+- `npm run migrate:reconcile` - Audit foto & awards vs Excel
+- `npm run validate` - Validasi data.xlsx
+
+## [1.0.0] - 2025-02-xx
+
+### Fitur Awal
+- Dashboard analitik dengan Chart.js
+- Direktori personel dengan pencarian
+- Upload foto & penghargaan
+- Export Excel
+- Landing page
 
 ---
 
-### Performance 🚀
-
-**MAJOR: Optimasi Loading Data - Target 70-80% Improvement**
-
-Implementasi optimasi performa komprehensif yang mempercepat loading aplikasi secara signifikan:
-
-#### 1. Server-Side Persistent Cache (Impact: ~40%)
-- **File system cache** untuk hasil parsing Excel (`data/.data-cache.json`)
-- Cache divalidasi berdasarkan `mtime` file Excel
-- Eliminasi re-parsing Excel setiap request
-- Logging cache hit/miss untuk monitoring (`X-Cache` header)
-- Cache otomatis ter-invalidasi saat data berubah
-
-**Sebelum**: Parsing Excel setiap kali `/api/data` dipanggil  
-**Sesudah**: Parse sekali, serve dari cache hingga file berubah
-
-#### 2. Gzip Compression (Impact: ~10%)
-- Middleware `compression` untuk semua response
-- Level 6 compression (balance speed vs ratio)
-- Threshold 1KB (hanya compress response >1KB)
-- Menghemat bandwidth 60-70% untuk JSON & HTML
-
-#### 3. Lazy Loading Chart.js (Impact: ~20%)
-- Chart.js library dimuat **on-demand** saat tab Overview dibuka
-- Menghilangkan blocking script di initial load
-- Fallback graceful jika CDN gagal
-- Function `ensureChartLib()` dengan Promise-based loading
-
-**Sebelum**: Chart.js (260KB) dimuat blocking di `<head>`  
-**Sesudah**: Load hanya saat dibutuhkan, async + non-blocking
-
-#### 4. Progressive Chart Rendering (Impact: ~25%)
-- Chart di-render dalam **3 batch** menggunakan `requestIdleCallback()`
-- Batch 1 (immediate): Chart penting (Provinsi, Kab/Kota)
-- Batch 2 (50ms delay): Chart sekunder (Gender, Pendidikan, Jabatan)
-- Batch 3 (100ms delay): Chart tambahan (Divisi, Agama, Kelengkapan, Silang)
-- KPI cards render instant sebelum charts
-
-**Sebelum**: 9 chart di-render blocking sekaligus  
-**Sesudah**: Progressive rendering, UI responsive lebih cepat
-
-#### 5. Avatar Hydration Batching (Impact: ~15%)
-- Avatar diproses dalam **batch 8 elemen** dengan delay 30ms
-- **Priority queue**: Avatar visible diproses lebih dulu
-- IntersectionObserver dengan rootMargin 300px untuk smooth scrolling
-- Fallback batching untuk browser tanpa IntersectionObserver
-- Hidden avatars diproses dengan delay lebih besar (60ms)
-
-**Sebelum**: Semua avatar di-resolve sekaligus (blocking)  
-**Sesudah**: Batched + prioritized, non-blocking UI thread
-
-#### 6. Parallel Data Loading (Impact: ~30-40%)
-- Dataset personel dan awards dimuat **parallel** dengan `Promise.all()`
-- Eliminasi waterfall loading (sequential fetch)
-
-**Sebelum**:
-```javascript
-const data = await loadDataset();      // Wait...
-const awards = await loadAwards();     // Then wait again...
-```
-
-**Sesudah**:
-```javascript
-const [data, awards] = await Promise.all([
-    loadDataset({ force }),
-    loadAwards({ force })
-]);
-```
-
-#### Technical Details
-
-**Modified Files:**
-- `server.js`: Persistent cache + gzip compression + cache invalidation
-- `assets/js/charts.js`: Lazy loading library dengan `ensureChartLib()`
-- `assets/js/app.js`: Progressive rendering + parallel loading
-- `assets/js/photos.js`: Batched avatar hydration dengan priority queue
-- `index.html`: Removed blocking Chart.js script tag
-- `package.json`: Added `compression` dependency
-
-**Cache Management:**
-- Memory cache: Cleared on server restart
-- Persistent cache: Survives restart, invalidated on Excel mtime change
-- Client-side sessionStorage: Unchanged (15min TTL)
-
-**Browser Compatibility:**
-- `requestIdleCallback`: Fallback ke `setTimeout` untuk Safari
-- `IntersectionObserver`: Fallback ke batch processing untuk IE11
-- Semua optimasi degradable gracefully
-
-**Monitoring:**
-- Server logs: `[cache] ✓/✗` untuk hit/miss status
-- Response headers: `X-Cache: HIT-MEMORY | HIT-DISK | MISS`
-- Parse time tracking: `X-Parse-Time` header (ms)
-
-**Estimated Total Impact: 70-80% faster initial load** ⚡
-
----
-
-### Fixed
-- **Normalisasi data Bawaslu Provinsi**: Ketika kolom `KABUPATEN/KOTA` memiliki nilai yang sama dengan kolom `PROVINSI` (misalnya: "SULAWESI SELATAN"), sistem sekarang secara otomatis mengubah nilai kabkota menjadi format "Provinsi [Nama Provinsi]" untuk membedakan antara data Bawaslu tingkat Provinsi dengan tingkat Kabupaten/Kota.
-  
-  **Sebelum perbaikan**: 
-  - Card di direktori menampilkan nama kosong atau tidak jelas untuk data Bawaslu Provinsi
-  - Provinsi: "Sulawesi Selatan", Kab/Kota: "Sulawesi Selatan"
-  
-  **Setelah perbaikan**:
-  - Card di direktori menampilkan "Provinsi Sulawesi Selatan" 
-  - Provinsi: "Sulawesi Selatan", Kab/Kota: "Provinsi Sulawesi Selatan"
-  
-  Perbaikan ini mempengaruhi:
-  - Tampilan card di halaman direktori
-  - Filter berdasarkan kabupaten/kota
-  - Faceted search
-  - URL dan identitas record stabil
-
-### Tests
-- Menambahkan test case untuk `normalizeRecord()` yang memverifikasi konversi kabkota yang cocok dengan provinsi
-- Menambahkan test case untuk memastikan kabkota yang berbeda tetap tidak berubah
-- Semua 29 test berhasil dijalankan
-
-## [2.0.0] - Previous version
-... (changelog sebelumnya)
+Format: [Major.Minor.Patch]
+- **Major**: Breaking changes atau perubahan arsitektur besar
+- **Minor**: Fitur baru backward-compatible
+- **Patch**: Bug fixes dan improvements kecil

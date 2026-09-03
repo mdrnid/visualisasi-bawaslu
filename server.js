@@ -117,10 +117,27 @@ app.use((req, res, next) => {
     res.on('finish', () => {
         console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} - ${Date.now() - start}ms`);
     });
+    
+    // Security headers
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    
+    // Content Security Policy (CSP)
+    // Strict CSP untuk LAN deployment - hanya allow same-origin resources
+    res.setHeader('Content-Security-Policy', [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'", // unsafe-inline diperlukan untuk inline styles sementara
+        "img-src 'self' data:", // data: untuk avatar fallback
+        "font-src 'self'",
+        "connect-src 'self'",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'"
+    ].join('; '));
+    
     next();
 });
 
@@ -176,34 +193,10 @@ app.post('/api/login', express.json(), (req, res) => {
     res.json({ ok: true, message: 'Login berhasil', expiresIn: 12 * 60 * 60 * 1000 });
 });
 
-// Legacy GET /login untuk backward compatibility (redirect ke halaman login form)
+// GET /login - serve halaman login HTML
 app.get('/login', (req, res) => {
     if (!APP_TOKEN) return res.redirect('/');
-    // TODO: Redirect ke halaman login.html (akan dibuat di fase berikutnya)
-    res.status(200).type('text/html').send(`
-        <!DOCTYPE html>
-        <html><head><meta charset="utf-8"><title>Login</title></head>
-        <body style="font-family:sans-serif;max-width:400px;margin:50px auto;padding:20px;">
-            <h2>Login</h2>
-            <form id="form">
-                <label>Token: <input type="password" id="token" required style="width:100%;padding:8px;margin:10px 0;"></label><br>
-                <button type="submit" style="padding:10px 20px;background:#007bff;color:white;border:none;cursor:pointer;">Login</button>
-            </form>
-            <script>
-                document.getElementById('form').onsubmit = async (e) => {
-                    e.preventDefault();
-                    const token = document.getElementById('token').value;
-                    const res = await fetch('/api/login', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({token})
-                    });
-                    if (res.ok) window.location = '/';
-                    else alert('Token salah');
-                };
-            </script>
-        </body></html>
-    `);
+    res.sendFile(path.join(__dirname, 'login.html'));
 });
 
 // ---------- Berkas statis: whitelist, bukan seluruh folder ----------
@@ -248,6 +241,46 @@ app.get('/data/data.xlsx', requireAuth, (req, res) => {
 app.get('/data/penghargaan.json', requireAuth, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.sendFile(AWARDS_FILE);
+});
+
+// GET /api/stats - Stats publik untuk landing page (tanpa auth)
+app.get('/api/stats', (req, res) => {
+    try {
+        if (!fs.existsSync(DATA_FILE)) {
+            return res.json({ ok: false, error: 'Data tidak tersedia' });
+        }
+        
+        const workbook = XLSX.readFile(DATA_FILE, { cellDates: false });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
+        
+        const totalPersonel = Math.max(0, grid.length - 1); // kurangi header
+        
+        // Hitung statistik sederhana tanpa expose PII
+        let maleCount = 0;
+        let femaleCount = 0;
+        
+        for (let i = 1; i < grid.length; i++) {
+            const row = grid[i];
+            const gender = String(row[6] || '').toLowerCase(); // kolom JENIS KELAMIN (index 6)
+            if (gender.includes('laki') || gender === 'l' || gender === 'm') maleCount++;
+            else if (gender.includes('perempuan') || gender === 'p' || gender === 'f') femaleCount++;
+        }
+        
+        res.json({
+            ok: true,
+            total: totalPersonel,
+            byGender: {
+                male: maleCount,
+                female: femaleCount
+            },
+            lastUpdate: fs.existsSync(DATA_FILE) ? fs.statSync(DATA_FILE).mtime : null
+        });
+    } catch (err) {
+        console.error('[server] /api/stats error:', err);
+        res.status(500).json({ ok: false, error: 'Gagal membaca statistik' });
+    }
 });
 
 // ---------- Data JSON Fast Endpoint with Persistent Cache ----------
