@@ -4,6 +4,64 @@
  */
 import { slugify } from './text-utils.js';
 
+// ============ KOLOM EXCEL (Sumber Kebenaran Tunggal) ============
+
+/**
+ * Urutan kolom Excel yang akan ditulis oleh server.
+ * Ini adalah satu-satunya definisi urutan kolom - server.js akan mengimpornya.
+ */
+export const EXCEL_COLUMNS = Object.freeze([
+    'NO',
+    'PROVINSI',
+    'KABUPATEN/KOTA',
+    'NO URUT',
+    'NAMA',
+    'JENIS KELAMIN',
+    'JABATAN',
+    'WAKORDIV',
+    'DIVISI',
+    'AMJ',
+    'AGAMA',
+    'PENDIDIKAN',
+    'HP',
+    'EMAIL PRIBADI',
+    'EMAIL KANTOR',
+    'ALAMAT',
+    'FACEBOOK',
+    'INSTAGRAM',
+    'WEBSITE',
+    'FOTO',
+]);
+
+/**
+ * Mapping dari key internal (di JavaScript) ke nama kolom Excel.
+ * Server dan klien sama-sama pakai mapping ini.
+ */
+export const KEY_TO_EXCEL_COLUMN = Object.freeze({
+    no: 'NO',
+    provinsi: 'PROVINSI',
+    kabkota: 'KABUPATEN/KOTA',
+    noUrut: 'NO URUT',
+    nama: 'NAMA',
+    gender: 'JENIS KELAMIN',
+    jabatan: 'JABATAN',
+    wakordiv: 'WAKORDIV',
+    div: 'DIVISI',
+    amj: 'AMJ',
+    agama: 'AGAMA',
+    pendidikan: 'PENDIDIKAN',
+    hp: 'HP',
+    emailP: 'EMAIL PRIBADI',
+    emailK: 'EMAIL KANTOR',
+    alamat: 'ALAMAT',
+    facebook: 'FACEBOOK',
+    instagram: 'INSTAGRAM',
+    website: 'WEBSITE',
+    foto: 'FOTO',
+});
+
+// ============ DEFINISI FIELD (UI & Validasi) ============
+
 export const FIELDS = Object.freeze([
     { key: 'no', label: 'No', group: 'identitas', type: 'number' },
     { key: 'provinsi', label: 'Provinsi', group: 'identitas', type: 'category', required: true, facet: true },

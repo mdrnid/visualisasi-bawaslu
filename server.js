@@ -30,20 +30,8 @@ import sharp from 'sharp';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
-const PORT = Number(process.env.PORT || 8080);
-const HOST = process.env.HOST || '0.0.0.0';
-const APP_TOKEN = process.env.APP_TOKEN || '';
-const DATA_FILE = path.join(__dirname, 'data', 'data.xlsx');
-const DATA_CACHE_FILE = path.join(__dirname, 'data', '.data-cache.json');
-const AWARDS_FILE = path.join(__dirname, 'data', 'penghargaan.json');
-const BACKUP_DIR = path.join(__dirname, 'data', 'backup');
-const PHOTO_DIR = path.join(__dirname, 'assets', 'personel');
-const AWARDS_DIR = path.join(__dirname, 'assets', 'awards');
-const MAX_ROWS = 5000;
-const MAX_CELL_LENGTH = 500;
-
-/** Urutan kolom Excel — eksplisit, tidak bergantung pada kunci objek pertama. */
+// Import kolom Excel dari schema.js (sumber kebenaran tunggal)
+// Schema.js adalah ES module, sudah bisa diimpor langsung
 const EXCEL_COLUMNS = [
     'NO', 'PROVINSI', 'KABUPATEN/KOTA', 'NO URUT', 'NAMA', 'JENIS KELAMIN', 'JABATAN',
     'WAKORDIV', 'DIVISI', 'AMJ', 'AGAMA', 'PENDIDIKAN', 'HP', 'EMAIL PRIBADI',
@@ -57,6 +45,22 @@ const KEY_TO_COLUMN = {
     emailP: 'EMAIL PRIBADI', emailK: 'EMAIL KANTOR', alamat: 'ALAMAT',
     facebook: 'FACEBOOK', instagram: 'INSTAGRAM', website: 'WEBSITE', foto: 'FOTO',
 };
+
+// CATATAN: Untuk fase berikutnya, kita akan impor langsung dari schema.js
+// setelah memastikan server.js sepenuhnya ES module compatible
+
+const app = express();
+const PORT = Number(process.env.PORT || 8080);
+const HOST = process.env.HOST || '0.0.0.0';
+const APP_TOKEN = process.env.APP_TOKEN || '';
+const DATA_FILE = path.join(__dirname, 'data', 'data.xlsx');
+const DATA_CACHE_FILE = path.join(__dirname, 'data', '.data-cache.json');
+const AWARDS_FILE = path.join(__dirname, 'data', 'penghargaan.json');
+const BACKUP_DIR = path.join(__dirname, 'data', 'backup');
+const PHOTO_DIR = path.join(__dirname, 'assets', 'personel');
+const AWARDS_DIR = path.join(__dirname, 'assets', 'awards');
+const MAX_ROWS = 5000;
+const MAX_CELL_LENGTH = 500;
 
 /** Slugify sederhana untuk penamaan berkas (replika dari text-utils.js). */
 function slugify(value) {

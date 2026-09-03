@@ -79,12 +79,21 @@ npm run validate       # Memvalidasi berkas data Excel
 
 ## Struktur kolom yang dikenali
 
-NO, PROVINSI, NAMA, JENIS KELAMIN, JABATAN, WAKOR, DIV, AM, JAGA, AGAMA,
-JENJANG PENDIDIKAN, NOMOR HP/WHATSAPP, E-MAIL PRIBADI, E-MAIL KANTOR,
-ALAMAT KANTOR, FACEBOOK, INSTAGRAM, WEBSITE.
+Kolom berikut dikenali otomatis (variasi penulisan header ditangani oleh `HEADER_RULES` di `assets/js/schema.js`):
 
-Variasi penulisan header ditangani otomatis (mis. `NO. HP`, `WA`, `IG`, `E-MAIL DINAS`).
-Untuk menambah kolom baru, ubah `FIELDS` dan `HEADER_RULES` pada `assets/js/schema.js`.
+**NO, PROVINSI, KABUPATEN/KOTA, NO URUT, NAMA, JENIS KELAMIN, JABATAN, WAKORDIV, DIVISI, AMJ, AGAMA, PENDIDIKAN, HP, EMAIL PRIBADI, EMAIL KANTOR, ALAMAT, FACEBOOK, INSTAGRAM, WEBSITE, FOTO**
+
+Variasi penulisan header ditangani otomatis, misalnya:
+- `NO. HP`, `NOMOR HP`, `WA` → `HP`
+- `E-MAIL DINAS`, `EMAIL KANTOR` → `EMAIL KANTOR`
+- `IG` → `INSTAGRAM`
+- `JENJANG PENDIDIKAN` → `PENDIDIKAN`
+
+Untuk menambah kolom baru atau mengubah urutan, edit **satu sumber kebenaran** di `assets/js/schema.js`:
+- `EXCEL_COLUMNS`: urutan kolom saat menulis ke Excel
+- `KEY_TO_EXCEL_COLUMN`: mapping key internal → nama kolom Excel
+- `FIELDS`: definisi lengkap untuk UI dan validasi
+- `HEADER_RULES`: aturan pengenalan variasi nama header
 
 ## Keamanan & Privasi (UU PDP)
 
