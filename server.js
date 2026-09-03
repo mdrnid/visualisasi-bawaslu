@@ -34,15 +34,13 @@ const __dirname = path.dirname(__filename);
 // Import kolom Excel dari schema.js (sumber kebenaran tunggal)
 // Schema.js adalah ES module, sudah bisa diimpor langsung
 const EXCEL_COLUMNS = [
-    'ID',
-    'NO', 'PROVINSI', 'KABUPATEN/KOTA', 'NO URUT', 'NAMA', 'JENIS KELAMIN', 'JABATAN',
+    'PROVINSI', 'KABUPATEN/KOTA', 'NAMA', 'JENIS KELAMIN', 'JABATAN',
     'WAKORDIV', 'DIVISI', 'AMJ', 'AGAMA', 'PENDIDIKAN', 'HP', 'EMAIL PRIBADI',
     'EMAIL KANTOR', 'ALAMAT', 'FACEBOOK', 'INSTAGRAM', 'WEBSITE', 'FOTO',
 ];
 
 const KEY_TO_COLUMN = {
-    id: 'ID',
-    no: 'NO', provinsi: 'PROVINSI', kabkota: 'KABUPATEN/KOTA', noUrut: 'NO URUT',
+    provinsi: 'PROVINSI', kabkota: 'KABUPATEN/KOTA',
     nama: 'NAMA', gender: 'JENIS KELAMIN', jabatan: 'JABATAN', wakordiv: 'WAKORDIV',
     div: 'DIVISI', amj: 'AMJ', agama: 'AGAMA', pendidikan: 'PENDIDIKAN', hp: 'HP',
     emailP: 'EMAIL PRIBADI', emailK: 'EMAIL KANTOR', alamat: 'ALAMAT',
@@ -125,12 +123,12 @@ app.use((req, res, next) => {
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     
     // Content Security Policy (CSP)
-    // Strict CSP untuk LAN deployment - hanya allow same-origin resources
+    // Allow CDN for Chart.js (jsdelivr) untuk sementara
     res.setHeader('Content-Security-Policy', [
         "default-src 'self'",
-        "script-src 'self'",
-        "style-src 'self' 'unsafe-inline'", // unsafe-inline diperlukan untuk inline styles sementara
-        "img-src 'self' data:", // data: untuk avatar fallback
+        "script-src 'self' https://cdn.jsdelivr.net",
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net", // Allow Cropper.js CSS
+        "img-src 'self' data: blob:", // blob: untuk cropped image
         "font-src 'self'",
         "connect-src 'self'",
         "frame-ancestors 'none'",
@@ -474,7 +472,7 @@ function rotateBackups(keep = 10) {
     }
 }
 
-app.post('/api/save', requireAuth, (req, res) => {
+app.post('/api/save', requireAuth, async (req, res) => {
     const rows = req.body && req.body.rows;
     const baseMtime = req.body && req.body.baseMtime; // Optimistic concurrency control
     const confirmBulkDelete = req.body && req.body.confirmBulkDelete; // Guard penghapusan massal
@@ -491,7 +489,8 @@ app.post('/api/save', requireAuth, (req, res) => {
     // Validasi skema: cek field wajib, format email, dll
     const validationIssues = [];
     rows.forEach((row, idx) => {
-        const issues = validateRecord(row);
+        // Strict validation untuk data yang di-save (email harus valid)
+        const issues = validateRecord(row, { strictEmail: true });
         const errors = issues.filter(i => i.severity === 'error');
         if (errors.length > 0) {
             validationIssues.push({
@@ -565,8 +564,27 @@ app.post('/api/save', requireAuth, (req, res) => {
 
     // Tulis ke berkas sementara di direktori yang sama, lalu rename -> atomik.
     const tmp = DATA_FILE + '.' + process.pid + '.tmp';
-    XLSX.writeFile(book, tmp);
-    fs.renameSync(tmp, DATA_FILE);
+    XLSX.writeFile(book, tmp, { bookType: 'xlsx' });
+    
+    // Retry rename dengan delay untuk handle Windows file lock
+    let retries = 3;
+    let renamed = false;
+    while (retries > 0 && !renamed) {
+        try {
+            fs.renameSync(tmp, DATA_FILE);
+            renamed = true;
+        } catch (err) {
+            if (err.code === 'EPERM' && retries > 1) {
+                console.warn(`[server] File locked, retry in 100ms... (${retries} left)`);
+                await new Promise(resolve => setTimeout(resolve, 100));
+                retries--;
+            } else {
+                // Cleanup tmp file sebelum throw error
+                try { fs.unlinkSync(tmp); } catch (_) {}
+                throw err;
+            }
+        }
+    }
     
     // Clear cache (memory & persistent)
     cachedDataGrid = null;
@@ -617,14 +635,27 @@ app.post('/api/upload-photo', requireAuth, upload.single('photo'), async (req, r
         // Update manifes foto jika ada
         const manifestPath = path.join(PHOTO_DIR, 'index.json');
         try {
-            let manifest = [];
+            let manifestData = {
+                _generated: new Date().toISOString(),
+                _count: 0,
+                files: []
+            };
+            
             if (fs.existsSync(manifestPath)) {
-                manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+                manifestData = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
             }
-            if (!manifest.includes(filename)) {
-                manifest.push(filename);
-                manifest.sort();
-                fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+            
+            // Ensure files is array
+            if (!Array.isArray(manifestData.files)) {
+                manifestData.files = [];
+            }
+            
+            if (!manifestData.files.includes(filename)) {
+                manifestData.files.push(filename);
+                manifestData.files.sort();
+                manifestData._count = manifestData.files.length;
+                manifestData._generated = new Date().toISOString();
+                fs.writeFileSync(manifestPath, JSON.stringify(manifestData, null, 2));
             }
         } catch (manifestErr) {
             console.warn('[server] gagal update manifes foto:', manifestErr.message);
@@ -662,11 +693,21 @@ app.post('/api/rename-photo', requireAuth, express.json(), (req, res) => {
         const manifestPath = path.join(PHOTO_DIR, 'index.json');
         try {
             if (fs.existsSync(manifestPath)) {
-                let manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-                manifest = manifest.filter((f) => f !== oldSlug + '.webp');
-                if (!manifest.includes(newSlug + '.webp')) manifest.push(newSlug + '.webp');
-                manifest.sort();
-                fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+                let manifestData = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+                
+                // Ensure files is array
+                if (!Array.isArray(manifestData.files)) {
+                    manifestData.files = [];
+                }
+                
+                manifestData.files = manifestData.files.filter((f) => f !== oldSlug + '.webp');
+                if (!manifestData.files.includes(newSlug + '.webp')) {
+                    manifestData.files.push(newSlug + '.webp');
+                }
+                manifestData.files.sort();
+                manifestData._count = manifestData.files.length;
+                manifestData._generated = new Date().toISOString();
+                fs.writeFileSync(manifestPath, JSON.stringify(manifestData, null, 2));
             }
         } catch (_) { /* abaikan */ }
 

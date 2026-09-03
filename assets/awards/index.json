@@ -1,22 +1,20 @@
-[
-  "bone/alwi/SULAWESI SELATAN_Kabupaten Bone_Narasumber_Alwi, S.E., S.H-1.pdf",
-  "bone/dr-kamridah-habe/SULAWESI SELATAN_Kabupaten Bone_Fasilitator_Dr.Kamridah Habe,S.Pd.,I.M.Pd-1.pdf",
-  "bone/dr-nur-alim/PHOTO-2026-03-08-16-29-28.pdf",
-  "bone/dr-nur-alim/SERTIFIKAT Dr.NUR ALIM.pdf.pdf",
-  "bone/dr-nur-alim/SULAWESI SELATAN_Kabupaten Bone_Narasumber_Dr.Nur Alim,S.H.,M.H.Kes-1.pdf",
-  "bone/muhammad-aris/SULAWESI SELATAN_Kabupaten Bone_Narasumber_Muhammad Aris,S.E-1.pdf",
-  "bone/rohzali-putra-badaruddin/SULAWESI SELATAN_Kabupaten Bone_Fasilitator_Rohzali Putra Badaruddin,S.H-1.pdf",
-  "jeneponto/bustanil-nassa/BUSTANIL NASSA, SHI.,MH. (2).pdf",
-  "jeneponto/bustanil-nassa/BUSTANIL NASSA, SHI.,MH. Certifikat.pdf",
-  "jeneponto/bustanil-nassa/BUSTANIL NASSA, SHI.,MH..pdf",
-  "jeneponto/bustanil-nassa/BUSTANIL NASSA,SHI.,MH..pdf",
-  "jeneponto/bustanil-nassa/MK RI CERTIFICATE.pdf",
-  "jeneponto/bustanil-nassa/Sertifikat BUSTANIL NASSA, SHI.,MH. Selasa Menyapa 28 Juli 2026.pdf",
-  "jeneponto/bustanil-nassa/SERTIFIKAT DRAFTER PUTUSAN PS SULSEL.pdf",
-  "jeneponto/bustanil-nassa/SERTIFIKAT_BUSTANIL_NASSA.pdf",
-  "jeneponto/bustanil-nassa/SULAWESI SELATAN_Kabupaten Jeneponto_Narasumber_Bustanil Nassa, S.Hi., M.H.pdf",
-  "jeneponto/bustanil-nassa/WhatsApp Image 2026-08-20 at 11.06.18.jpeg",
-  "jeneponto/eric-fhatur-rahman/Seritifikat mediator Eric Fhatur Rahman.pdf",
-  "jeneponto/eric-fhatur-rahman/SULAWESI SELATAN_Kabupaten Jeneponto_Narasumber_Eric Fhatur Rahman, A.Md. Kom.pdf",
-  "jeneponto/muhammad-alwi/SULAWESI SELATAN_Kabupaten Jeneponto_Narasumber_Muhammad Alwi, S.Ag., M.Pd.pdf"
-]
+{
+  "_generated": "2026-09-03T13:43:46.713Z",
+  "_kabupatenCount": 2,
+  "_totalPersonel": 9,
+  "kabupaten": {
+    "bone": [
+      "alwi",
+      "dr-kamridah-habe",
+      "dr-nur-alim",
+      "muhammad-aris",
+      "nur-alim-sh-mh-kes",
+      "rohzali-putra-badaruddin"
+    ],
+    "jeneponto": [
+      "bustanil-nassa",
+      "eric-fhatur-rahman",
+      "muhammad-alwi"
+    ]
+  }
+}

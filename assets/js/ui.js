@@ -425,6 +425,7 @@ export function renderTable(records, page, pageSize, { sortKey = null, sortDir =
     thead.innerHTML =
         '<tr>' +
         '<th class="chk-col" style="width: 40px; text-align: center;"><input type="checkbox" id="chkAll" title="Pilih Semua"></th>' +
+        '<th style="width: 60px; text-align: center;">No.</th>' +
         VISIBLE_FIELDS.map((f) => {
             const isSorted = sortKey === f.key;
             const sortClass = isSorted ? 'class="th-sorted"' : '';
@@ -451,16 +452,17 @@ export function renderTable(records, page, pageSize, { sortKey = null, sortDir =
     tbody.innerHTML = slice.length
         ? slice
               .map(
-                  (r) =>
+                  (r, idx) =>
                       '<tr data-id="' +
                       esc(r._id) +
                       '" tabindex="0">' +
                       '<td class="chk-col" style="text-align: center;"><input type="checkbox" class="chk-row" value="' + esc(r._id) + '"></td>' +
+                      '<td style="text-align: center; color: #999;">' + (start + idx + 1) + '</td>' +
                       VISIBLE_FIELDS.map((f) => cellHtml(r, f, sortKey === f.key)).join('') +
                       '</tr>'
               )
               .join('')
-        : '<tr><td class="empty" colspan="' + (VISIBLE_FIELDS.length + 1) + '">Tidak ada baris yang cocok.</td></tr>';
+        : '<tr><td class="empty" colspan="' + (VISIBLE_FIELDS.length + 2) + '">Tidak ada baris yang cocok.</td></tr>';
 
     const from = records.length ? start + 1 : 0;
     const to = Math.min(start + pageSize, records.length);

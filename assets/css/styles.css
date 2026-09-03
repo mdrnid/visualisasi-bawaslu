@@ -133,6 +133,10 @@ code {
     background: #fff;
     border-bottom: 3px solid var(--brand);
     padding: 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 .appbar__inner {
@@ -141,14 +145,30 @@ code {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 20px;
-    min-height: 72px;
+    padding: 10px 16px;
+    min-height: 64px;
+    gap: 12px;
+}
+
+@media (max-width: 640px) {
+    .appbar__inner {
+        padding: 8px 12px;
+        min-height: 56px;
+    }
 }
 
 .appbar__actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+    .appbar__actions .btn {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
 }
 
 /* Logo & Brand */
@@ -156,12 +176,20 @@ code {
     display: flex;
     align-items: center;
     gap: 12px;
+    flex-shrink: 0;
 }
 
 .brand__logo {
-    height: 54px;
-    width: auto;
+    height: 40px;
+    width: 40px;
     object-fit: contain;
+}
+
+@media (max-width: 640px) {
+    .brand__logo {
+        height: 32px;
+        width: 32px;
+    }
 }
 
 .brand__title {
@@ -171,10 +199,22 @@ code {
     margin: 0;
 }
 
+@media (max-width: 640px) {
+    .brand__title {
+        font-size: 14px;
+    }
+}
+
 .brand__sub {
     font-size: 12px;
     color: var(--muted);
     margin-top: 2px;
+}
+
+@media (max-width: 640px) {
+    .brand__sub {
+        display: none;
+    }
 }
 
 .brand__mark {
@@ -183,7 +223,6 @@ code {
     border-radius: 11px;
     display: grid;
     place-items: center;
-    background: linear-gradient(135deg, var(--brand), var(--brand-dark));
     color: #fff;
     font-weight: 700;
     letter-spacing: .5px;
@@ -228,9 +267,11 @@ code {
 }
 
 .tab.is-active {
-    background: var(--brand-soft);
+    background: transparent;
     color: var(--brand);
-    border-color: var(--brand);
+    border-color: transparent;
+    font-weight: 600;
+    border-bottom: 3px solid var(--brand);
 }
 
 /* Badge */
@@ -1626,4 +1667,24 @@ td.td-sorted {
 .dir-profile-role, .dir-profile-score {
     width: 100%;
     text-align: center;
+}
+
+/* ==================== PHOTO UPLOAD STYLING ==================== */
+label[for="iFotoFile"]:hover {
+    background: var(--brand-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 130, 32, 0.3);
+}
+
+label[for="iFotoFile"]:active {
+    transform: translateY(0);
+}
+
+#photoPreview {
+    transition: all 0.3s ease;
+}
+
+#photoPreview:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
 }

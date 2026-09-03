@@ -8,6 +8,7 @@ import * as UI from './ui.js';
 import { esc } from './text-utils.js';
 import { avatarMarkup, hydrateAvatars, clearPhotoCache } from './photos.js';
 import { attachAwards, clearAwardsCache, loadAwards, nameKey, regionKey } from './awards.js';
+import { loadCropper } from './cropper-loader.js';
 
 const { $, $$ } = UI;
 
@@ -787,8 +788,55 @@ function debounce(fn, ms = 200) {
 /* ---------- CRUD Logic ---------- */
 let currentAwardsList = [];
 let pendingPhotoFile = null;
+let pendingCroppedFile = null;
+let cropperInstance = null;
 let currentPersonId = null;
 let currentPersonName = '';
+
+/** Update photo preview di modal form */
+function updatePhotoPreview() {
+    const photoPreview = $('#photoPreview');
+    if (!photoPreview) return;
+    
+    let photoImg = photoPreview.querySelector('.avatar__img');
+    let initials = photoPreview.querySelector('.avatar__initials');
+    
+    if (pendingCroppedFile || pendingPhotoFile) {
+        const blob = pendingCroppedFile || pendingPhotoFile;
+        const url = URL.createObjectURL(blob);
+        
+        // Remove existing img if any
+        if (photoImg) {
+            photoImg.remove();
+        }
+        
+        // Create new img
+        const img = document.createElement('img');
+        img.className = 'avatar__img';
+        img.alt = 'Preview';
+        img.src = url;
+        img.style.position = 'absolute';
+        img.style.inset = '0';
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'cover';
+        
+        photoPreview.style.position = 'relative';
+        photoPreview.appendChild(img);
+        
+        if (initials) {
+            initials.style.display = 'none';
+        }
+    } else {
+        // Reset to initials
+        if (photoImg) {
+            photoImg.remove();
+        }
+        if (initials) {
+            initials.style.display = 'flex';
+        }
+    }
+}
 
 function renderAwardsForm() {
     const container = $('#awardsContainer');
@@ -854,6 +902,7 @@ function openModal(id = null) {
     
     // Reset foto - tampilkan avatar dengan inisial
     pendingPhotoFile = null;
+    pendingCroppedFile = null;
     const photoPreview = $('#photoPreview');
     if (!photoPreview) return;
     
@@ -877,8 +926,7 @@ function openModal(id = null) {
     }
     
     photoPreview.style.display = 'flex';
-    initials.style.display = 'flex';
-    $('#iFotoPath').value = '';
+    if (initials) initials.style.display = 'flex';
     
     currentAwardsList = [];
     currentPersonId = id;
@@ -908,7 +956,6 @@ function openModal(id = null) {
             $('#iFacebook').value = rec.facebook || '';
             $('#iInstagram').value = rec.instagram || '';
             $('#iWebsite').value = rec.website || '';
-            $('#iFotoPath').value = rec.foto || '';
             
             // Update inisial
             const namaValue = rec.nama || '';
@@ -978,10 +1025,14 @@ function closeModal() {
     const m = $('#modalForm');
     if (m) m.hidden = true;
     document.body.style.overflow = '';
+    
+    // Reset foto state
+    pendingPhotoFile = null;
+    pendingCroppedFile = null;
 }
 
 async function handlePhotoUpload(nama) {
-    if (!pendingPhotoFile) return $('#iFotoPath').value;
+    if (!pendingPhotoFile) return ''; // Tidak ada foto baru
     
     const formData = new FormData();
     formData.append('photo', pendingPhotoFile);
@@ -990,13 +1041,17 @@ async function handlePhotoUpload(nama) {
     try {
         const res = await fetch('/api/upload-photo', { method: 'POST', body: formData });
         const data = await res.json();
-        if (data.ok) return data.path;
+        if (data.ok) {
+            // Clear photo cache setelah upload berhasil
+            clearPhotoCache();
+            return data.path;
+        }
         UI.toast('Gagal upload foto: ' + data.error, 'warn');
-        return $('#iFotoPath').value;
+        return '';
     } catch (e) {
         console.error(e);
         UI.toast('Kesalahan koneksi saat upload foto.', 'warn');
-        return $('#iFotoPath').value;
+        return '';
     }
 }
 
@@ -1150,7 +1205,8 @@ async function saveData() {
     }
     
     closeModal();
-    // Panggil reload supaya data penghargaan termuat kembali dan ngelink dengan benar
+    // Clear photo cache dan reload untuk update foto
+    clearPhotoCache();
     await reload({ force: true });
     UI.toast('Data berhasil disimpan.', 'success');
 }
@@ -1410,51 +1466,125 @@ function bindEvents() {
         }, 100);
     });
 
-    $('#iFotoFile')?.addEventListener('change', (e) => {
+    // Event handler untuk file input foto
+    $('#iFotoFile')?.addEventListener('change', async (e) => {
         const file = e.target.files[0];
-        const photoPreview = $('#photoPreview');
-        if (!photoPreview) return;
+        if (!file) return;
         
-        let photoImg = photoPreview.querySelector('.avatar__img');
-        let initials = photoPreview.querySelector('.avatar__initials');
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            UI.toast('File harus berupa gambar!', 'warn');
+            e.target.value = '';
+            return;
+        }
         
-        if (file) {
-            pendingPhotoFile = file;
+        // Validate file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            UI.toast('Ukuran file maksimal 5MB!', 'warn');
+            e.target.value = '';
+            return;
+        }
+        
+        // Show loading
+        UI.showState('loading', 'Memuat editor foto...');
+        
+        try {
+            // Load Cropper.js library lazily
+            const Cropper = await loadCropper();
+            
+            // Open crop modal
+            const modalCrop = $('#modalCrop');
+            const cropImage = $('#cropImage');
+            if (!modalCrop || !cropImage) {
+                UI.showState('hidden');
+                return;
+            }
             
             const reader = new FileReader();
             reader.onload = (e) => {
-                // Remove existing img if any
-                if (photoImg) {
-                    photoImg.remove();
+                cropImage.src = e.target.result;
+                modalCrop.hidden = false;
+                UI.showState('hidden');
+                
+                // Destroy existing cropper if any
+                if (cropperInstance) {
+                    cropperInstance.destroy();
                 }
                 
-                // Create new img
-                const img = document.createElement('img');
-                img.className = 'avatar__img';
-                img.alt = 'Preview';
-                img.src = e.target.result;
-                img.style.position = 'absolute';
-                img.style.inset = '0';
-                img.style.width = '100%';
-                img.style.height = '100%';
-                img.style.objectFit = 'cover';
-                
-                photoPreview.style.position = 'relative';
-                photoPreview.appendChild(img);
-                
-                if (initials) {
-                    initials.style.display = 'none';
-                }
+                // Initialize Cropper.js
+                cropperInstance = new Cropper(cropImage, {
+                    aspectRatio: 1, // Square crop
+                    viewMode: 2,
+                    dragMode: 'move',
+                    autoCropArea: 1,
+                    restore: false,
+                    guides: true,
+                    center: true,
+                    highlight: false,
+                    cropBoxMovable: true,
+                    cropBoxResizable: true,
+                    toggleDragModeOnDblclick: false,
+                });
             };
             reader.readAsDataURL(file);
-        } else {
-            pendingPhotoFile = null;
-            if (photoImg) {
-                photoImg.remove();
+        } catch (err) {
+            console.error('[app] Failed to load Cropper.js:', err);
+            UI.showState('hidden');
+            UI.toast('Gagal memuat editor foto. Coba lagi.', 'error');
+            e.target.value = '';
+        }
+    });
+
+    // Handle crop confirm
+    $('#btnCropConfirm')?.addEventListener('click', () => {
+        if (!cropperInstance) return;
+        
+        const canvas = cropperInstance.getCroppedCanvas({
+            width: 800,
+            height: 800,
+            imageSmoothingEnabled: true,
+            imageSmoothingQuality: 'high',
+        });
+        
+        canvas.toBlob((blob) => {
+            if (!blob) {
+                UI.toast('Gagal memproses gambar', 'error');
+                return;
             }
-            if (initials) {
-                initials.style.display = 'flex';
-            }
+            
+            // Convert blob to File
+            const fileName = $('#iFotoFile').files[0]?.name || 'cropped.jpg';
+            pendingPhotoFile = new File([blob], fileName, { type: 'image/jpeg' });
+            pendingCroppedFile = blob;
+            
+            // Update preview
+            updatePhotoPreview();
+            
+            // Close crop modal
+            closeCropModal();
+            
+            UI.toast('Foto berhasil di-crop!', 'success');
+        }, 'image/jpeg', 0.9);
+    });
+
+    // Handle close crop modal
+    function closeCropModal() {
+        const modalCrop = $('#modalCrop');
+        if (modalCrop) modalCrop.hidden = true;
+        
+        if (cropperInstance) {
+            cropperInstance.destroy();
+            cropperInstance = null;
+        }
+        
+        // Reset file input
+        const fileInput = $('#iFotoFile');
+        if (fileInput) fileInput.value = '';
+    }
+
+    $('#modalCrop')?.addEventListener('click', (e) => {
+        if (e.target.hasAttribute('data-close-crop')) {
+            closeCropModal();
         }
     });
 

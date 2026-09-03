@@ -13,7 +13,7 @@
              style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
              img-src 'self' data:;
              connect-src 'self';"
-/>
+/><!--  -->
 <title>Direktori &amp; Dashboard Personel</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" />
 <link rel="stylesheet" href="./assets/css/styles.css" />
@@ -25,7 +25,7 @@
   <div class="appbar__inner">
     <div class="brand">
       <div class="brand__mark" aria-hidden="true">
-  <img src="./assets/logo-bawaslu.png" alt="Logo" class="brand__logo" width="40" height="40" decoding="async">
+  <img src="./assets/image/logo-bawaslu.webp" alt="Logo Bawaslu" class="brand__logo" width="40" height="40" decoding="async">
 </div>
       <div>
         <h1 class="brand__title" id="appName">Direktori &amp; Dashboard Personel</h1>
@@ -215,8 +215,44 @@
         <h3 style="font-size: 13px; margin: 0; color: var(--brand); border-bottom: 1px solid var(--line); padding-bottom: 4px;">Identitas</h3>
         <div class="field"><label for="iNama">Nama *</label><input type="text" id="iNama" required /></div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
-            <div class="field"><label for="iProvinsi">Provinsi *</label><input type="text" id="iProvinsi" required /></div>
-            <div class="field"><label for="iKabkota">Kab/Kota</label><input type="text" id="iKabkota" /></div>
+            <div class="field">
+              <label for="iProvinsi">Provinsi *</label>
+              <select id="iProvinsi" required>
+                <option value="">Pilih Provinsi</option>
+                <option value="Sulawesi Selatan" selected>Sulawesi Selatan</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="iKabkota">Kab/Kota</label>
+              <select id="iKabkota">
+                <option value="">Pilih Kab/Kota</option>
+                <option value="Provinsi Sulawesi Selatan">Provinsi Sulawesi Selatan</option>
+                <option value="Kabupaten Bantaeng">Kabupaten Bantaeng</option>
+                <option value="Kabupaten Barru">Kabupaten Barru</option>
+                <option value="Kabupaten Bone">Kabupaten Bone</option>
+                <option value="Kabupaten Bulukumba">Kabupaten Bulukumba</option>
+                <option value="Kabupaten Enrekang">Kabupaten Enrekang</option>
+                <option value="Kabupaten Gowa">Kabupaten Gowa</option>
+                <option value="Kabupaten Jeneponto">Kabupaten Jeneponto</option>
+                <option value="Kabupaten Kepulauan Selayar">Kabupaten Kepulauan Selayar</option>
+                <option value="Kabupaten Luwu">Kabupaten Luwu</option>
+                <option value="Kabupaten Luwu Timur">Kabupaten Luwu Timur</option>
+                <option value="Kabupaten Luwu Utara">Kabupaten Luwu Utara</option>
+                <option value="Kabupaten Maros">Kabupaten Maros</option>
+                <option value="Kabupaten Pangkajene dan Kepulauan">Kabupaten Pangkajene dan Kepulauan</option>
+                <option value="Kabupaten Pinrang">Kabupaten Pinrang</option>
+                <option value="Kabupaten Sidenreng Rappang">Kabupaten Sidenreng Rappang</option>
+                <option value="Kabupaten Sinjai">Kabupaten Sinjai</option>
+                <option value="Kabupaten Soppeng">Kabupaten Soppeng</option>
+                <option value="Kabupaten Takalar">Kabupaten Takalar</option>
+                <option value="Kabupaten Tana Toraja">Kabupaten Tana Toraja</option>
+                <option value="Kabupaten Toraja Utara">Kabupaten Toraja Utara</option>
+                <option value="Kabupaten Wajo">Kabupaten Wajo</option>
+                <option value="Kota Makassar">Kota Makassar</option>
+                <option value="Kota Palopo">Kota Palopo</option>
+                <option value="Kota Parepare">Kota Parepare</option>
+              </select>
+            </div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
           <div class="field"><label for="iGender">Jenis Kelamin</label>
@@ -257,14 +293,21 @@
               <span class="avatar__initials" style="font-size: 48px; font-weight: 700; color: var(--brand);">MA</span>
             </div>
             <div style="display: flex; flex-direction: column; gap: 10px; justify-content: center;">
-              <input type="file" id="iFotoFile" accept=".jpg,.jpeg,.png,.webp" />
-              <input type="text" id="iFotoPath" placeholder="Atau isi path manual (assets/personel/...)" style="width: 100%;" />
+              <input type="file" id="iFotoFile" accept="image/*" />
+              <small style="color: #666; font-size: 12px;">Format: JPG, PNG, WebP, GIF. Maks 5MB.<br>Akan otomatis di-crop dan dikonversi ke WebP.</small>
             </div>
           </div>
         </div>
 
         <h3 style="font-size: 13px; margin: 10px 0 0; color: var(--brand); border-bottom: 1px solid var(--line); padding-bottom: 4px;">Jabatan</h3>
-        <div class="field"><label for="iJabatan">Jabatan</label><input type="text" id="iJabatan" /></div>
+        <div class="field">
+          <label for="iJabatan">Jabatan</label>
+          <select id="iJabatan">
+            <option value="">Pilih Jabatan</option>
+            <option value="Ketua">Ketua</option>
+            <option value="Anggota">Anggota</option>
+          </select>
+        </div>
         <div class="field"><label for="iWakordiv">Wakil Koordinator Divisi</label><input type="text" id="iWakordiv" /></div>
         <div class="field"><label for="iDiv">Divisi</label><input type="text" id="iDiv" /></div>
         <div class="field"><label for="iAmj">Akhir Masa Jabatan</label><input type="text" id="iAmj" placeholder="YYYY-MM-DD atau Tahun" /></div>
@@ -282,7 +325,7 @@
             <div class="field"><label for="iFacebook">Facebook (Username)</label><input type="text" id="iFacebook" /></div>
             <div class="field"><label for="iInstagram">Instagram (Username)</label><input type="text" id="iInstagram" /></div>
         </div>
-        <div class="field"><label for="iWebsite">Website</label><input type="url" id="iWebsite" /></div>
+        <div class="field"><label for="iWebsite">Website Kantor</label><input type="url" id="iWebsite" /></div>
         
         <h3 style="font-size: 13px; margin: 10px 0 0; color: var(--brand); border-bottom: 1px solid var(--line); padding-bottom: 4px;">Penghargaan & Prestasi</h3>
         <div id="awardsContainer" style="display: flex; flex-direction: column; gap: 12px; margin-top: 4px;">
@@ -295,6 +338,26 @@
           <button type="submit" class="btn btn--primary">Simpan Data</button>
         </div>
       </form>
+    </div>
+  </aside>
+</div>
+
+<!-- Modal Crop Foto -->
+<div class="drawer" id="modalCrop" hidden>
+  <div class="drawer__scrim" data-close-crop></div>
+  <aside class="drawer__panel" role="dialog" aria-modal="true" style="width: 90%; max-width: 600px; right: 0; left: auto; transform: none; height: 100vh; overflow-y: auto;">
+    <header class="drawer__head">
+      <h2>Crop Foto</h2>
+      <button class="btn btn--icon" data-close-crop aria-label="Tutup">×</button>
+    </header>
+    <div class="drawer__body" style="padding: 20px;">
+      <div style="max-width: 100%; max-height: 60vh; overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center;">
+        <img id="cropImage" style="max-width: 100%; display: block;" />
+      </div>
+      <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 8px;">
+        <button type="button" class="btn btn--ghost" data-close-crop>Batal</button>
+        <button type="button" class="btn btn--primary" id="btnCropConfirm">Crop & Gunakan</button>
+      </div>
     </div>
   </aside>
 </div>

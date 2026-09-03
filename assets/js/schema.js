@@ -9,13 +9,11 @@ import { slugify } from './text-utils.js';
 /**
  * Urutan kolom Excel yang akan ditulis oleh server.
  * Ini adalah satu-satunya definisi urutan kolom - server.js akan mengimpornya.
+ * Kolom NO dan ID dihapus - akan di-generate otomatis di webapp.
  */
 export const EXCEL_COLUMNS = Object.freeze([
-    'ID',
-    'NO',
     'PROVINSI',
     'KABUPATEN/KOTA',
-    'NO URUT',
     'NAMA',
     'JENIS KELAMIN',
     'JABATAN',
@@ -39,11 +37,8 @@ export const EXCEL_COLUMNS = Object.freeze([
  * Server dan klien sama-sama pakai mapping ini.
  */
 export const KEY_TO_EXCEL_COLUMN = Object.freeze({
-    id: 'ID',
-    no: 'NO',
     provinsi: 'PROVINSI',
     kabkota: 'KABUPATEN/KOTA',
-    noUrut: 'NO URUT',
     nama: 'NAMA',
     gender: 'JENIS KELAMIN',
     jabatan: 'JABATAN',
@@ -65,11 +60,9 @@ export const KEY_TO_EXCEL_COLUMN = Object.freeze({
 // ============ DEFINISI FIELD (UI & Validasi) ============
 
 export const FIELDS = Object.freeze([
-    { key: 'id', label: 'ID', group: 'identitas', type: 'id', required: true },
-    { key: 'no', label: 'No', group: 'identitas', type: 'number' },
+    // NO akan di-generate otomatis di webapp (auto-increment), tidak perlu di Excel
     { key: 'provinsi', label: 'Provinsi', group: 'identitas', type: 'category', required: true, facet: true },
     { key: 'kabkota', label: 'Kab/Kota', group: 'identitas', type: 'category', facet: true, searchable: true },
-    { key: 'noUrut', label: 'No Urut', group: 'identitas', type: 'number' },
     { key: 'nama', label: 'Nama', group: 'identitas', type: 'text', required: true, searchable: true },
     { key: 'gender', label: 'Jenis Kelamin', group: 'identitas', type: 'category', facet: true },
     { key: 'jabatan', label: 'Jabatan', group: 'jabatan', type: 'category', facet: true, searchable: true },
@@ -380,7 +373,7 @@ export function assignStableIds(records) {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 
 /** @returns {Array<{rowNumber:number, nama:string, severity:'error'|'warning', field:string, message:string}>} */
-export function validateRecord(rec) {
+export function validateRecord(rec, { strictEmail = false } = {}) {
     const issues = [];
     const push = (severity, field, message) =>
         issues.push({ rowNumber: rec._rowNumber, nama: rec.nama || '(tanpa nama)', severity, field, message });
@@ -388,10 +381,23 @@ export function validateRecord(rec) {
     for (const f of FIELDS) {
         if (f.required && !rec[f.key]) push('error', f.label, 'Wajib diisi tetapi kosong');
     }
-    for (const k of ['emailP', 'emailK']) {
-        if (rec[k] && !EMAIL_RE.test(rec[k]))
-            push('error', FIELD_BY_KEY[k].label, 'Format e-mail tidak valid: ' + rec[k]);
+    
+    // Validate email pribadi (single email only)
+    if (rec.emailP && !EMAIL_RE.test(rec.emailP)) {
+        const severity = strictEmail ? 'error' : 'warning';
+        push(severity, FIELD_BY_KEY.emailP.label, 'Format e-mail tidak valid: ' + rec.emailP);
     }
+    
+    // Validate email kantor (allow multiple emails separated by -, /, ;, or comma)
+    if (rec.emailK) {
+        const emails = rec.emailK.split(/[\s\-\/;,]+/).map(e => e.trim()).filter(Boolean);
+        const invalidEmails = emails.filter(e => !EMAIL_RE.test(e));
+        if (invalidEmails.length > 0) {
+            const severity = strictEmail ? 'error' : 'warning';
+            push(severity, FIELD_BY_KEY.emailK.label, 'Format e-mail tidak valid: ' + invalidEmails.join(', '));
+        }
+    }
+    
     if (rec.hp && !/^62\d{8,13}$/.test(rec.hp)) {
         push('warning', 'Nomor HP/WhatsApp', 'Format nomor tidak wajar: ' + rec.hp);
     }
@@ -401,11 +407,11 @@ export function validateRecord(rec) {
     return issues;
 }
 
-/** Deteksi duplikat lintas baris (nomor HP dan e-mail kantor). */
+/** Deteksi duplikat lintas baris (hanya nomor HP, karena email kantor boleh sama). */
 export function findDuplicates(records) {
     const issues = [];
     const seen = new Map();
-    for (const key of ['hp', 'emailK']) {
+    for (const key of ['hp']) {
         seen.clear();
         for (const r of records) {
             const v = r[key];
