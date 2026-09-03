@@ -1135,7 +1135,7 @@ async function saveData() {
     UI.toast('Data berhasil disimpan.', 'success');
 }
 
-async function syncToServer() {
+async function syncToServer({ confirmBulkDelete = false } = {}) {
     try {
         const rows = state.all.map((r) => {
             const obj = {};
@@ -1152,21 +1152,35 @@ async function syncToServer() {
         const response = await fetch('/api/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rows, baseMtime: state.mtime })
+            body: JSON.stringify({ rows, baseMtime: state.mtime, confirmBulkDelete })
         });
         const resData = await response.json();
         
         if (response.status === 409) {
-            // Conflict: data sudah berubah oleh pengguna lain
-            const shouldReload = window.confirm(
-                resData.error + '\n\n' + 
-                (resData.hint || 'Muat ulang data dulu, lalu ulangi perubahan Anda.') + 
-                '\n\nKlik OK untuk muat ulang data sekarang.'
-            );
-            if (shouldReload) {
-                await reload({ force: true });
+            // Conflict: data sudah berubah atau bulk delete warning
+            if (resData.requireConfirmBulkDelete) {
+                const confirmed = window.confirm(
+                    resData.error + '\n\n' + 
+                    (resData.hint || '') + 
+                    '\n\nKlik OK untuk paksa simpan.'
+                );
+                if (confirmed) {
+                    // Retry dengan confirmBulkDelete
+                    return await syncToServer({ confirmBulkDelete: true });
+                }
+                return false;
+            } else {
+                // Concurrency conflict
+                const shouldReload = window.confirm(
+                    resData.error + '\n\n' + 
+                    (resData.hint || 'Muat ulang data dulu, lalu ulangi perubahan Anda.') + 
+                    '\n\nKlik OK untuk muat ulang data sekarang.'
+                );
+                if (shouldReload) {
+                    await reload({ force: true });
+                }
+                return false;
             }
-            return false;
         }
         
         if (!response.ok) {
@@ -1459,9 +1473,35 @@ function bindEvents() {
             UI.toast('Pilih minimal satu baris data untuk dihapus.', 'warn');
             return;
         }
-        if (window.confirm('Yakin ingin menghapus ' + checked.length + ' data terpilih?')) {
-            const idsToDelete = new Set(checked.map((c) => c.value));
-            const updated = state.all.filter((r) => !idsToDelete.has(r._id));
+        
+        const idsToDelete = new Set(checked.map((c) => c.value));
+        const toDelete = state.all.filter((r) => idsToDelete.has(r._id));
+        const updated = state.all.filter((r) => !idsToDelete.has(r._id));
+        
+        // Guard 1: Validasi jumlah baris yang akan dikirim
+        const expectedCount = state.all.length - toDelete.length;
+        if (updated.length !== expectedCount) {
+            UI.toast('Error: Jumlah baris setelah hapus tidak konsisten. Operasi dibatalkan.', 'error');
+            return;
+        }
+        
+        // Guard 2: Tolak bila kehilangan > 20% data (kemungkinan kesalahan filter)
+        const lossPercent = (toDelete.length / state.all.length) * 100;
+        if (lossPercent > 20 && !window.confirmBulkDelete) {
+            const proceed = window.confirm(
+                `PERINGATAN: Anda akan menghapus ${toDelete.length} dari ${state.all.length} baris (${Math.round(lossPercent)}%).\n\n` +
+                'Ini adalah penghapusan massal yang signifikan. Pastikan Anda tidak sedang menggunakan filter yang menyembunyikan data lain.\n\n' +
+                'Lanjutkan menghapus?'
+            );
+            if (!proceed) return;
+        }
+        
+        // Konfirmasi dengan nama personel yang akan dihapus
+        const names = toDelete.slice(0, 5).map(r => r.nama || '(Tanpa nama)').join(', ');
+        const suffix = toDelete.length > 5 ? `, dan ${toDelete.length - 5} lainnya` : '';
+        const confirmMsg = `Hapus ${toDelete.length} personel?\n\n${names}${suffix}\n\nTindakan ini akan menimpa data.xlsx dan tidak dapat dibatalkan.`;
+        
+        if (window.confirm(confirmMsg)) {
             setRecords(updated);
             state.table.page = 0;
             
@@ -1472,7 +1512,11 @@ function bindEvents() {
             $('#btnConfirmDelete').hidden = true;
 
             render();
-            syncToServer();
+            syncToServer().then(success => {
+                if (success) {
+                    UI.toast(`Berhasil menghapus ${toDelete.length} personel.`, 'success');
+                }
+            });
         }
     });
 

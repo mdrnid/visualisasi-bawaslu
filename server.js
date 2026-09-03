@@ -334,6 +334,7 @@ function rotateBackups(keep = 10) {
 app.post('/api/save', requireAuth, (req, res) => {
     const rows = req.body && req.body.rows;
     const baseMtime = req.body && req.body.baseMtime; // Optimistic concurrency control
+    const confirmBulkDelete = req.body && req.body.confirmBulkDelete; // Guard penghapusan massal
     
     if (!Array.isArray(rows)) return res.status(400).json({ ok: false, error: 'Body harus { rows: [...] }.' });
     if (rows.length === 0) return res.status(400).json({ ok: false, error: 'Tidak ada baris untuk disimpan.' });
@@ -354,6 +355,32 @@ app.post('/api/save', requireAuth, (req, res) => {
                 hint: 'Muat ulang data terlebih dahulu, lalu ulangi perubahan Anda.',
                 currentMtime 
             });
+        }
+    }
+
+    // Guard penghapusan massal: tolak bila jumlah baris berkurang > 20% tanpa konfirmasi eksplisit
+    if (fs.existsSync(DATA_FILE)) {
+        try {
+            const workbook = XLSX.readFile(DATA_FILE, { cellDates: false });
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const existingGrid = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
+            const existingCount = existingGrid.length - 1; // kurangi header
+            
+            if (existingCount > 0) {
+                const lossPercent = ((existingCount - rows.length) / existingCount) * 100;
+                if (lossPercent > 20 && !confirmBulkDelete) {
+                    return res.status(409).json({
+                        ok: false,
+                        error: `Penghapusan massal terdeteksi: ${rows.length} baris dikirim, saat ini ${existingCount} baris (kehilangan ${Math.round(lossPercent)}%).`,
+                        hint: 'Pastikan Anda tidak sedang menyimpan data yang terfilter. Kirim ulang dengan confirmBulkDelete: true bila yakin.',
+                        requireConfirmBulkDelete: true
+                    });
+                }
+            }
+        } catch (err) {
+            console.warn('[server] gagal membaca file untuk guard bulk delete:', err.message);
+            // Lanjutkan, jangan blokir karena error baca file lama
         }
     }
 
