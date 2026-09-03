@@ -26,6 +26,7 @@ import { fileURLToPath } from 'node:url';
 import XLSX from 'xlsx';
 import multer from 'multer';
 import sharp from 'sharp';
+import { validateRecord } from './assets/js/schema.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,12 +34,14 @@ const __dirname = path.dirname(__filename);
 // Import kolom Excel dari schema.js (sumber kebenaran tunggal)
 // Schema.js adalah ES module, sudah bisa diimpor langsung
 const EXCEL_COLUMNS = [
+    'ID',
     'NO', 'PROVINSI', 'KABUPATEN/KOTA', 'NO URUT', 'NAMA', 'JENIS KELAMIN', 'JABATAN',
     'WAKORDIV', 'DIVISI', 'AMJ', 'AGAMA', 'PENDIDIKAN', 'HP', 'EMAIL PRIBADI',
     'EMAIL KANTOR', 'ALAMAT', 'FACEBOOK', 'INSTAGRAM', 'WEBSITE', 'FOTO',
 ];
 
 const KEY_TO_COLUMN = {
+    id: 'ID',
     no: 'NO', provinsi: 'PROVINSI', kabkota: 'KABUPATEN/KOTA', noUrut: 'NO URUT',
     nama: 'NAMA', gender: 'JENIS KELAMIN', jabatan: 'JABATAN', wakordiv: 'WAKORDIV',
     div: 'DIVISI', amj: 'AMJ', agama: 'AGAMA', pendidikan: 'PENDIDIKAN', hp: 'HP',
@@ -327,7 +330,10 @@ function toExcelRow(row) {
         if (!col) continue; // kolom tak dikenal diabaikan, tidak ditulis mentah
         
         // PERBAIKAN: Preserve tipe data untuk kolom tertentu
-        if (col === 'NO' || col === 'NO URUT') {
+        if (col === 'ID') {
+            // Kolom ID: tetap sebagai string uppercase
+            out[col] = String(value).toUpperCase().trim();
+        } else if (col === 'NO' || col === 'NO URUT') {
             // Kolom nomor: pastikan sebagai number
             const num = Number(value);
             out[col] = Number.isNaN(num) ? '' : num;
@@ -379,6 +385,29 @@ app.post('/api/save', requireAuth, (req, res) => {
     }
     if (rows.some((r) => typeof r !== 'object' || r === null || Array.isArray(r))) {
         return res.status(400).json({ ok: false, error: 'Setiap baris harus berupa objek.' });
+    }
+
+    // Validasi skema: cek field wajib, format email, dll
+    const validationIssues = [];
+    rows.forEach((row, idx) => {
+        const issues = validateRecord(row);
+        const errors = issues.filter(i => i.severity === 'error');
+        if (errors.length > 0) {
+            validationIssues.push({
+                rowIndex: idx,
+                nama: row.nama || '(tanpa nama)',
+                errors: errors.map(e => `${e.field}: ${e.message}`)
+            });
+        }
+    });
+    
+    if (validationIssues.length > 0) {
+        return res.status(422).json({
+            ok: false,
+            error: `Validasi gagal untuk ${validationIssues.length} baris.`,
+            issues: validationIssues.slice(0, 10), // Kirim max 10 untuk hindari response terlalu besar
+            hint: 'Perbaiki kesalahan sebelum menyimpan.'
+        });
     }
 
     // Optimistic concurrency: periksa apakah file sudah berubah sejak klien terakhir membaca
@@ -656,7 +685,68 @@ app.use((err, req, res, next) => {
     res.status(500).json({ ok: false, error: 'Terjadi kesalahan di server.' });
 });
 
-app.listen(PORT, HOST, () => {
+// ==================== STARTUP: GENERATE MANIFEST ====================
+
+/**
+ * Pindai folder foto & penghargaan, generate manifest.
+ * Dipanggil otomatis saat server start.
+ */
+async function generateManifests() {
+    console.log('[startup] Generating manifests...');
+    
+    // 1. Manifest foto
+    const photoManifest = path.join(__dirname, 'assets', 'personel', 'index.json');
+    try {
+        if (fs.existsSync(PHOTO_DIR)) {
+            const files = fs.readdirSync(PHOTO_DIR)
+                .filter(f => f.endsWith('.webp'))
+                .sort();
+            
+            const manifest = {
+                _generated: new Date().toISOString(),
+                _count: files.length,
+                files: files
+            };
+            
+            fs.writeFileSync(photoManifest, JSON.stringify(manifest, null, 2));
+            console.log(`[startup] ✓ Photo manifest: ${files.length} files`);
+        }
+    } catch (err) {
+        console.error('[startup] ⚠ Failed to generate photo manifest:', err.message);
+    }
+    
+    // 2. Manifest penghargaan (per kabupaten)
+    const awardsManifest = path.join(__dirname, 'assets', 'awards', 'index.json');
+    try {
+        if (fs.existsSync(AWARDS_DIR)) {
+            const kabupaten = {};
+            const kabFolders = fs.readdirSync(AWARDS_DIR, { withFileTypes: true })
+                .filter(d => d.isDirectory() && d.name !== 'node_modules');
+            
+            for (const kabDir of kabFolders) {
+                const kabPath = path.join(AWARDS_DIR, kabDir.name);
+                const personFolders = fs.readdirSync(kabPath, { withFileTypes: true })
+                    .filter(d => d.isDirectory());
+                
+                kabupaten[kabDir.name] = personFolders.map(p => p.name).sort();
+            }
+            
+            const manifest = {
+                _generated: new Date().toISOString(),
+                _kabupatenCount: Object.keys(kabupaten).length,
+                _totalPersonel: Object.values(kabupaten).reduce((sum, arr) => sum + arr.length, 0),
+                kabupaten
+            };
+            
+            fs.writeFileSync(awardsManifest, JSON.stringify(manifest, null, 2));
+            console.log(`[startup] ✓ Awards manifest: ${manifest._totalPersonel} personel across ${manifest._kabupatenCount} kabupaten`);
+        }
+    } catch (err) {
+        console.error('[startup] ⚠ Failed to generate awards manifest:', err.message);
+    }
+}
+
+app.listen(PORT, HOST, async () => {
     console.log('Server berjalan di http://' + HOST + ':' + PORT);
     if (!APP_TOKEN) {
         console.warn('PERINGATAN: APP_TOKEN kosong — /data/data.xlsx dan /api/save terbuka tanpa autentikasi.');
@@ -664,4 +754,8 @@ app.listen(PORT, HOST, () => {
     if (HOST === '0.0.0.0' && !APP_TOKEN) {
         console.warn('PERINGATAN: server terbuka ke seluruh jaringan TANPA autentikasi. Jangan dipakai membawa data asli.');
     }
+    
+    // Generate manifests otomatis saat startup
+    await generateManifests();
+    console.log('[startup] ✅ Server ready');
 });

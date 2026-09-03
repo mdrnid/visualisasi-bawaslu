@@ -7,11 +7,11 @@
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
-    "photos:manifest": "node scripts/generate-photo-manifest.mjs",
     "photos:compress": "node scripts/compress-photos.mjs",
     "awards": "node scripts/awards-from-xlsx.mjs",
-    "awards:manifest": "node scripts/generate-awards-manifest.mjs",
     "validate": "node scripts/validate-data.mjs data/data.xlsx",
+    "migrate:add-id": "node scripts/migrate-add-id.mjs",
+    "migrate:reconcile": "node scripts/reconcile-assets.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

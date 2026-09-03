@@ -11,6 +11,7 @@ import { slugify } from './text-utils.js';
  * Ini adalah satu-satunya definisi urutan kolom - server.js akan mengimpornya.
  */
 export const EXCEL_COLUMNS = Object.freeze([
+    'ID',
     'NO',
     'PROVINSI',
     'KABUPATEN/KOTA',
@@ -38,6 +39,7 @@ export const EXCEL_COLUMNS = Object.freeze([
  * Server dan klien sama-sama pakai mapping ini.
  */
 export const KEY_TO_EXCEL_COLUMN = Object.freeze({
+    id: 'ID',
     no: 'NO',
     provinsi: 'PROVINSI',
     kabkota: 'KABUPATEN/KOTA',
@@ -63,6 +65,7 @@ export const KEY_TO_EXCEL_COLUMN = Object.freeze({
 // ============ DEFINISI FIELD (UI & Validasi) ============
 
 export const FIELDS = Object.freeze([
+    { key: 'id', label: 'ID', group: 'identitas', type: 'id', required: true },
     { key: 'no', label: 'No', group: 'identitas', type: 'number' },
     { key: 'provinsi', label: 'Provinsi', group: 'identitas', type: 'category', required: true, facet: true },
     { key: 'kabkota', label: 'Kab/Kota', group: 'identitas', type: 'category', facet: true, searchable: true },
@@ -110,6 +113,7 @@ const slug = (v) =>
 
 /** Urutan penting: pola paling spesifik didahulukan. */
 const HEADER_RULES = [
+    ['id', (n) => n === 'ID' || n === 'IDPERSONEL' || n === 'PERSONELID'],
     ['foto', (n) => n === 'FOTO' || n === 'PHOTO' || n.includes('PASFOTO') || n.includes('FOTOPROFIL') || n.includes('URLFOTO')],
     ['provinsi', (n) => n.includes('PROVINSI') || n === 'PROV'],
     ['kabkota', (n) => n.includes('KABKOTA') || n.includes('KABUPATEN') || n.includes('KOTA')],
@@ -307,13 +311,51 @@ export function normalizeRecord(raw, index, cc = '62') {
  * Memberi _id unik & stabil. Dipanggil sekali setelah seluruh record dinormalisasi,
  * karena deteksi tabrakan butuh melihat semua baris.
  */
+/**
+ * Assign ID stabil ke setiap record.
+ * - Bila record sudah punya field `id` (dari Excel), gunakan itu.
+ * - Bila belum, generate ID format PRS-XXXX berdasarkan urutan.
+ * - Untuk backward compatibility, juga assign `_id` untuk kode lama yang masih pakai itu.
+ */
 export function assignStableIds(records) {
     const seen = new Map();
+    const idSeen = new Set();
+    let autoCounter = 1;
+    
     for (const rec of records) {
+        // 1. Cek apakah record sudah punya ID dari Excel
+        if (rec.id && typeof rec.id === 'string' && rec.id.trim()) {
+            const cleanId = rec.id.trim().toUpperCase();
+            // Validasi format ID (PRS-XXXX atau apapun yang dimulai PRS)
+            if (/^PRS-\d{4,}$/.test(cleanId)) {
+                if (idSeen.has(cleanId)) {
+                    // ID duplikat - generate baru
+                    console.warn(`[schema] ID duplikat: ${cleanId}, generate baru`);
+                } else {
+                    rec.id = cleanId;
+                    rec._id = cleanId; // backward compatibility
+                    idSeen.add(cleanId);
+                    continue;
+                }
+            }
+        }
+        
+        // 2. Generate ID baru (PRS-XXXX zero-padded 4 digit)
+        let newId;
+        do {
+            newId = `PRS-${String(autoCounter).padStart(4, '0')}`;
+            autoCounter++;
+        } while (idSeen.has(newId));
+        
+        rec.id = newId;
+        rec._id = newId; // backward compatibility
+        idSeen.add(newId);
+        
+        // 3. Untuk backward compatibility, assign _key juga
         const base = rec._key || 'baris-' + rec._rowNumber;
         const n = (seen.get(base) || 0) + 1;
         seen.set(base, n);
-        rec._id = n === 1 ? base : base + '-' + n;
+        rec._legacyId = n === 1 ? base : base + '-' + n;
     }
     return records;
 }

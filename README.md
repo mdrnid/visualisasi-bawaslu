@@ -81,13 +81,19 @@ npm run validate       # Memvalidasi berkas data Excel
 
 Kolom berikut dikenali otomatis (variasi penulisan header ditangani oleh `HEADER_RULES` di `assets/js/schema.js`):
 
-**NO, PROVINSI, KABUPATEN/KOTA, NO URUT, NAMA, JENIS KELAMIN, JABATAN, WAKORDIV, DIVISI, AMJ, AGAMA, PENDIDIKAN, HP, EMAIL PRIBADI, EMAIL KANTOR, ALAMAT, FACEBOOK, INSTAGRAM, WEBSITE, FOTO**
+**ID, NO, PROVINSI, KABUPATEN/KOTA, NO URUT, NAMA, JENIS KELAMIN, JABATAN, WAKORDIV, DIVISI, AMJ, AGAMA, PENDIDIKAN, HP, EMAIL PRIBADI, EMAIL KANTOR, ALAMAT, FACEBOOK, INSTAGRAM, WEBSITE, FOTO**
 
 Variasi penulisan header ditangani otomatis, misalnya:
+- `IDPERSONEL`, `PERSONELID` → `ID`
 - `NO. HP`, `NOMOR HP`, `WA` → `HP`
 - `E-MAIL DINAS`, `EMAIL KANTOR` → `EMAIL KANTOR`
 - `IG` → `INSTAGRAM`
 - `JENJANG PENDIDIKAN` → `PENDIDIKAN`
+
+**Kolom ID:** Identifier unik stabil untuk setiap personel (format: `PRS-0001`, `PRS-0002`, dll). Bila file Excel Anda belum memiliki kolom ID, jalankan migrasi otomatis:
+```bash
+npm run migrate:add-id
+```
 
 Untuk menambah kolom baru atau mengubah urutan, edit **satu sumber kebenaran** di `assets/js/schema.js`:
 - `EXCEL_COLUMNS`: urutan kolom saat menulis ke Excel
