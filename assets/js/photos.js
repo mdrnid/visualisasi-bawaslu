@@ -180,11 +180,19 @@ function applyPhoto(el, url) {
     el.classList.add('has-photo');
 }
 
-/** Panggil setelah setiap render yang memakai avatarMarkup(). Idempoten. */
+/**
+ * Panggil setelah setiap render yang memakai avatarMarkup(). Idempoten.
+ * 
+ * OPTIMASI: Avatar di-hydrate dalam batch kecil untuk menghindari blocking UI thread.
+ * Menggunakan IntersectionObserver + batching untuk performa optimal.
+ */
 export function hydrateAvatars(root = document, options = {}) {
     if (!root || typeof root.querySelectorAll !== 'function') return;
     const nodes = Array.from(root.querySelectorAll('[data-avatar-pending="1"]'));
     if (!nodes.length) return;
+
+    const BATCH_SIZE = options.batchSize || 8; // Proses 8 avatar per batch
+    const BATCH_DELAY = options.batchDelay || 30; // Delay 30ms antar batch
 
     const start = (el) => {
         el.dataset.avatarPending = '0';
@@ -198,21 +206,77 @@ export function hydrateAvatars(root = document, options = {}) {
         });
     };
 
+    // Fallback untuk browser tanpa IntersectionObserver: proses dalam batch
     if (typeof IntersectionObserver === 'undefined') {
-        nodes.forEach(start);
+        console.log('[photos] ⚠️  IntersectionObserver not supported, using batched fallback');
+        processBatched(nodes, start, BATCH_SIZE, BATCH_DELAY);
         return;
     }
+
+    // Priority queue: avatar yang visible di viewport diproses lebih dulu
+    const visibleQueue = [];
+    const hiddenQueue = [];
+
     const observer = new IntersectionObserver(
         (entries, obs) => {
             for (const entry of entries) {
-                if (!entry.isIntersecting) continue;
                 obs.unobserve(entry.target);
-                start(entry.target);
+                
+                if (entry.isIntersecting) {
+                    visibleQueue.push(entry.target);
+                } else {
+                    hiddenQueue.push(entry.target);
+                }
+            }
+            
+            // Process visible avatars dengan priority tinggi
+            if (visibleQueue.length > 0) {
+                const batch = visibleQueue.splice(0, BATCH_SIZE);
+                batch.forEach(start);
             }
         },
-        { rootMargin: '250px 0px' }
+        { rootMargin: '300px 0px' } // Load sedikit lebih awal untuk smooth scrolling
     );
+
+    // Observe semua avatar
     nodes.forEach((node) => observer.observe(node));
+
+    // Process hidden avatars secara bertahap dengan delay lebih besar
+    if (hiddenQueue.length > 0) {
+        setTimeout(() => {
+            processBatched(hiddenQueue, start, BATCH_SIZE, BATCH_DELAY * 2);
+        }, 500); // Delay initial untuk prioritas ke visible avatars
+    }
+}
+
+/**
+ * Helper function untuk memproses elemen dalam batch dengan delay.
+ * Mencegah blocking UI thread saat processing banyak avatar sekaligus.
+ */
+function processBatched(elements, processor, batchSize, delay) {
+    let index = 0;
+    
+    const processBatch = () => {
+        const batch = elements.slice(index, index + batchSize);
+        
+        if (batch.length === 0) return;
+        
+        // Process batch
+        batch.forEach(processor);
+        
+        index += batchSize;
+        
+        // Schedule next batch
+        if (index < elements.length) {
+            const scheduleNext = typeof requestIdleCallback === 'function'
+                ? (fn) => requestIdleCallback(fn, { timeout: delay + 50 })
+                : (fn) => setTimeout(fn, delay);
+            
+            scheduleNext(processBatch);
+        }
+    };
+    
+    processBatch();
 }
 
 /** Dipanggil dari tombol "Muat Ulang Data". */

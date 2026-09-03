@@ -154,14 +154,8 @@ export async function loadDataset({ force = false } = {}) {
         const cached = readCache();
         if (cached) return { ...cached, fromCache: true };
     }
-    if (typeof XLSX === 'undefined') {
-        throw new DataError(
-            'Pustaka pembaca Excel gagal dimuat.',
-            'Periksa koneksi ke cdn.sheetjs.com atau host berkas xlsx.full.min.js secara lokal.'
-        );
-    }
 
-    const url = APP_CONFIG.dataSource.url + (force ? '?t=' + Date.now() : '');
+    const url = '/api/data' + (force ? '?t=' + Date.now() : '');
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const timeout = controller ? setTimeout(() => controller.abort(), 20000) : null;
 
@@ -170,7 +164,7 @@ export async function loadDataset({ force = false } = {}) {
         response = await fetch(url, { cache: force ? 'reload' : 'default', signal: controller?.signal });
     } catch (err) {
         throw new DataError(
-            err?.name === 'AbortError' ? 'Pengambilan berkas data melebihi batas waktu.' : 'Tidak dapat mengambil berkas data.',
+            err?.name === 'AbortError' ? 'Pengambilan data melebihi batas waktu.' : 'Tidak dapat mengambil data.',
             'Halaman ini harus dijalankan lewat HTTP server (npm run dev), bukan dibuka langsung dari file://.'
         );
     } finally {
@@ -180,20 +174,21 @@ export async function loadDataset({ force = false } = {}) {
     if (!response.ok) {
         throw new DataError(
             'Berkas data tidak ditemukan (HTTP ' + response.status + ').',
-            'Pastikan berkas tersimpan di ' + APP_CONFIG.dataSource.url + '.'
+            'Pastikan server backend berjalan dengan baik.'
         );
     }
 
-    const buffer = await response.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
-    const sheetName =
-        typeof APP_CONFIG.dataSource.sheet === 'number'
-            ? workbook.SheetNames[APP_CONFIG.dataSource.sheet]
-            : APP_CONFIG.dataSource.sheet;
-    const sheet = workbook.Sheets[sheetName];
-    if (!sheet) throw new DataError('Sheet "' + sheetName + '" tidak ada.', 'Periksa dataSource.sheet di config.js.');
+    const resJson = await response.json();
+    if (!resJson.ok || !resJson.data) {
+        throw new DataError('Format data dari server tidak valid.', 'Hubungi administrator.');
+    }
 
-    const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '', raw: false });
+    const { grid, sheetName, lastModified } = resJson.data;
+    
+    if (!grid || !Array.isArray(grid)) {
+        throw new DataError('Grid data kosong.', 'Pastikan file Excel memiliki data.');
+    }
+
     const { rows, meta } = gridToRaw(grid);
 
     const cc = APP_CONFIG.ui.defaultCountryCode;
@@ -207,9 +202,9 @@ export async function loadDataset({ force = false } = {}) {
             ...meta,
             sheetName,
             rowCount: records.length,
-            lastModified: response.headers.get('last-modified') || null,
+            lastModified: lastModified,
             loadedAt: new Date().toISOString(),
-            sourceUrl: APP_CONFIG.dataSource.url,
+            sourceUrl: '/api/data',
             unmappedColumns: meta.totalColumns - meta.recognized,
         },
     };

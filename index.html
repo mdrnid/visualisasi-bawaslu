@@ -249,6 +249,20 @@
           </select>
         </div>
 
+        <h3 style="font-size: 13px; margin: 10px 0 0; color: var(--brand); border-bottom: 1px solid var(--line); padding-bottom: 4px;">Foto</h3>
+        <div class="field">
+          <label>Foto Profil (WebP / JPG / PNG)</label>
+          <div style="display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: start; margin-top: 8px;">
+            <div id="photoPreview" class="avatar avatar--xl" style="width: 120px; height: 120px; display: flex; align-items: center; justify-content: center; background: #FFF4EA; border-radius: 50%; overflow: hidden;">
+              <span class="avatar__initials" style="font-size: 48px; font-weight: 700; color: var(--brand);">MA</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <input type="file" id="iFotoFile" accept=".jpg,.jpeg,.png,.webp" style="width: 100%;" />
+              <input type="text" id="iFotoPath" placeholder="Atau isi path manual (assets/personel/...)" style="width: 100%;" />
+            </div>
+          </div>
+        </div>
+
         <h3 style="font-size: 13px; margin: 10px 0 0; color: var(--brand); border-bottom: 1px solid var(--line); padding-bottom: 4px;">Jabatan</h3>
         <div class="field"><label for="iJabatan">Jabatan</label><input type="text" id="iJabatan" /></div>
         <div class="field"><label for="iWakordiv">Wakil Koordinator Divisi</label><input type="text" id="iWakordiv" /></div>
@@ -270,6 +284,12 @@
         </div>
         <div class="field"><label for="iWebsite">Website</label><input type="url" id="iWebsite" /></div>
         
+        <h3 style="font-size: 13px; margin: 10px 0 0; color: var(--brand); border-bottom: 1px solid var(--line); padding-bottom: 4px;">Penghargaan & Prestasi</h3>
+        <div id="awardsContainer" style="display: flex; flex-direction: column; gap: 12px; margin-top: 4px;">
+          <!-- Daftar penghargaan dinamis -->
+        </div>
+        <button type="button" class="btn btn--ghost" id="btnAddAward" style="align-self: flex-start; margin-top: 4px;">+ Tambah Penghargaan</button>
+        
         <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; background: white; padding-bottom: 20px; z-index: 10;">
           <button type="button" class="btn btn--ghost" data-close-modal>Batal</button>
           <button type="submit" class="btn btn--primary">Simpan Data</button>
@@ -281,8 +301,7 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous" defer></script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js" integrity="sha384-gx12pQMMYnabkTgbCHqqrT65RwDnXI/f/dU2H9JUmT0KUeiMF5bf+yroQBmX0Nuk" crossorigin="anonymous" defer></script>
+<!-- Chart.js sekarang dimuat secara lazy oleh charts.js -->
 <script type="module" src="./assets/js/app.js"></script>
 </body>
 </html>

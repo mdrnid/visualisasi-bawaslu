@@ -1,5 +1,7 @@
 /** Lapisan visualisasi: satu-satunya tempat yang mengetahui Chart.js. */
 const registry = new Map();
+let chartLibLoading = null;
+let chartLibLoaded = false;
 
 export const PALETTE = [
     '#F58220',
@@ -10,6 +12,48 @@ export const PALETTE = [
     '#FDBA74',
     '#8D6E63',
 ];
+
+/**
+ * Lazy load Chart.js library hanya saat dibutuhkan.
+ * Mengembalikan Promise yang resolve saat library siap digunakan.
+ */
+export async function ensureChartLib() {
+    if (chartLibLoaded && window.Chart) return true;
+    
+    if (chartLibLoading) return chartLibLoading;
+    
+    chartLibLoading = new Promise((resolve, reject) => {
+        // Cek apakah sudah dimuat sebelumnya (dari script tag di HTML)
+        if (window.Chart) {
+            chartLibLoaded = true;
+            console.log('[charts] ✓ Chart.js already loaded');
+            resolve(true);
+            return;
+        }
+        
+        console.log('[charts] ⏳ Loading Chart.js library...');
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+        script.integrity = 'sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4';
+        script.crossOrigin = 'anonymous';
+        script.async = true;
+        
+        script.onload = () => {
+            chartLibLoaded = true;
+            console.log('[charts] ✓ Chart.js loaded successfully');
+            resolve(true);
+        };
+        
+        script.onerror = () => {
+            console.error('[charts] ✗ Failed to load Chart.js');
+            reject(new Error('Failed to load Chart.js library'));
+        };
+        
+        document.head.appendChild(script);
+    });
+    
+    return chartLibLoading;
+}
 
 export function applyDefaults() {
     // BUG LAMA: tidak ada penjagaan bila CDN Chart.js gagal dimuat -> ReferenceError

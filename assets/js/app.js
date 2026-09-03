@@ -7,7 +7,7 @@ import * as C from './charts.js';
 import * as UI from './ui.js';
 import { esc } from './text-utils.js';
 import { avatarMarkup, hydrateAvatars, clearPhotoCache } from './photos.js';
-import { attachAwards, clearAwardsCache, loadAwards } from './awards.js';
+import { attachAwards, clearAwardsCache, loadAwards, nameKey, regionKey } from './awards.js';
 
 const { $, $$ } = UI;
 
@@ -600,30 +600,78 @@ function clampTablePage(total) {
 
 /* ---------- Render ---------- */
 
-function renderCharts(rows) {
+/**
+ * Progressive chart rendering: render chart secara bertahap untuk menghindari blocking UI.
+ * Chart di-render dalam batch dengan delay kecil menggunakan requestIdleCallback.
+ */
+async function renderCharts(rows) {
+    // Pastikan Chart.js sudah dimuat
+    try {
+        await C.ensureChartLib();
+    } catch (err) {
+        console.error('[app] Gagal memuat Chart.js:', err);
+        UI.toast('Grafik tidak dapat ditampilkan. Periksa koneksi internet.', 'warn');
+        return;
+    }
+    
+    C.applyDefaults();
+    
+    // Data preparation (sync, cepat)
     const prov = A.countBy(rows, 'provinsi');
+    const kabkota = A.countBy(rows, 'kabkota');
+    const gender = A.countBy(rows, 'gender');
+    const pendidikan = A.countBy(rows, 'pendidikan', { sort: 'label' });
+    const jabatan = A.countBy(rows, 'jabatan', { limit: APP_CONFIG.ui.topJabatan });
+    const divisi = A.countBy(rows, 'div');
+    const agama = A.countBy(rows, 'agama');
+    const kelengkapan = A.completeness(rows);
+    const silang = A.crossTab(rows, 'provinsi', 'pendidikan', { rowLimit: 12 });
+    
+    // Update hint text (instant)
     const hintProv = $('#hintProv');
     if (hintProv) hintProv.textContent = prov.labels.length + ' provinsi';
-    C.barChart('chProvinsi', prov, { horizontal: prov.labels.length > 7 });
-
-    const kabkota = A.countBy(rows, 'kabkota');
     const hintKabkota = $('#hintKabkota');
     if (hintKabkota) hintKabkota.textContent = kabkota.labels.length + ' kab/kota';
-    C.barChart('chKabkota', kabkota, { horizontal: kabkota.labels.length > 7 });
-
-    C.donutChart('chGender', A.countBy(rows, 'gender'));
-    C.donutChart('chPendidikan', A.countBy(rows, 'pendidikan', { sort: 'label' }));
-    C.barChart('chJabatan', A.countBy(rows, 'jabatan', { limit: APP_CONFIG.ui.topJabatan }), {
-        horizontal: true,
-        color: C.PALETTE[1],
-    });
-    C.barChart('chPenugasan', A.countBy(rows, 'div'), { color: C.PALETTE[4], horizontal: true });
-    C.barChart('chAgama', A.countBy(rows, 'agama'), { color: C.PALETTE[2] });
-    C.percentBar('chKelengkapan', A.completeness(rows));
-    C.stackedBar('chSilang', A.crossTab(rows, 'provinsi', 'pendidikan', { rowLimit: 12 }));
+    
+    // Batch 1: Chart penting (above the fold)
+    const renderBatch1 = () => {
+        C.barChart('chProvinsi', prov, { horizontal: prov.labels.length > 7 });
+        C.barChart('chKabkota', kabkota, { horizontal: kabkota.labels.length > 7 });
+    };
+    
+    // Batch 2: Chart sekunder
+    const renderBatch2 = () => {
+        C.donutChart('chGender', gender);
+        C.donutChart('chPendidikan', pendidikan);
+        C.barChart('chJabatan', jabatan, { horizontal: true, color: C.PALETTE[1] });
+    };
+    
+    // Batch 3: Chart tambahan
+    const renderBatch3 = () => {
+        C.barChart('chPenugasan', divisi, { color: C.PALETTE[4], horizontal: true });
+        C.barChart('chAgama', agama, { color: C.PALETTE[2] });
+        C.percentBar('chKelengkapan', kelengkapan);
+        C.stackedBar('chSilang', silang);
+    };
+    
+    // Render secara progresif menggunakan requestIdleCallback atau setTimeout
+    const scheduleRender = (fn, delay = 0) => {
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(fn, { timeout: delay + 100 });
+        } else {
+            setTimeout(fn, delay);
+        }
+    };
+    
+    // Render batch 1 immediately (penting)
+    renderBatch1();
+    
+    // Render batch 2 dan 3 saat browser idle
+    scheduleRender(renderBatch2, 50);
+    scheduleRender(renderBatch3, 100);
 }
 
-function render({ syncUrl = true } = {}) {
+async function render({ syncUrl = true } = {}) {
     const rows = selectRecords();
 
     FACETS.forEach(({ id, key, all }) => {
@@ -636,7 +684,10 @@ function render({ syncUrl = true } = {}) {
     if (searchInput) searchInput.value = state.filters.q;
 
     if (state.view === 'overview') {
+        // Render KPI dulu (instant, non-blocking)
         UI.renderKpis(A.kpis(rows, state.all));
+        
+        // Chart di-render secara async dan progresif
         renderCharts(rows);
     } else {
         C.destroyAll();
@@ -679,11 +730,18 @@ function switchView(view) {
 
 /* ---------- Ekspor ---------- */
 
-function exportExcel(rows) {
-    if (!window.XLSX) {
-        UI.toast('Pustaka XLSX belum dimuat.', 'error');
-        return;
+async function exportExcel(rows) {
+    let xlsxLib = window.XLSX;
+    if (!xlsxLib) {
+        UI.toast('Menyiapkan library ekspor...', 'info');
+        try {
+            xlsxLib = await import('https://cdn.sheetjs.com/xlsx-0.20.2/package/mjs/xlsx.mjs');
+        } catch (e) {
+            UI.toast('Gagal memuat library ekspor. Pastikan Anda terhubung ke internet.', 'error');
+            return;
+        }
     }
+    
     const data = rows.map((r) => {
         const obj = {};
         VISIBLE_FIELDS.forEach((f) => {
@@ -691,9 +749,9 @@ function exportExcel(rows) {
         });
         return obj;
     });
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Data Personel");
+    const ws = xlsxLib.utils.json_to_sheet(data);
+    const wb = xlsxLib.utils.book_new();
+    xlsxLib.utils.book_append_sheet(wb, ws, "Data Personel");
 
     const awardRows = rows.flatMap((r) =>
         (r._awards || []).map((a) => ({
@@ -708,9 +766,9 @@ function exportExcel(rows) {
         }))
     );
     if (awardRows.length) {
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(awardRows), 'Penghargaan');
+        xlsxLib.utils.book_append_sheet(wb, xlsxLib.utils.json_to_sheet(awardRows), 'Penghargaan');
     }
-    XLSX.writeFile(wb, 'personel-' + new Date().toISOString().slice(0, 10) + '.xlsx');
+    xlsxLib.writeFile(wb, 'personel-' + new Date().toISOString().slice(0, 10) + '.xlsx');
     UI.toast('Berhasil mengekspor ' + rows.length + ' baris ke Excel.', 'success');
 }
 
@@ -725,16 +783,111 @@ function debounce(fn, ms = 200) {
 }
 
 /* ---------- CRUD Logic ---------- */
+let currentAwardsList = [];
+let pendingPhotoFile = null;
+let currentPersonId = null;
+let currentPersonName = '';
+
+function renderAwardsForm() {
+    const container = $('#awardsContainer');
+    if (!container) return;
+    
+    container.innerHTML = currentAwardsList.length === 0 
+        ? '<p class="muted" style="font-size: 13px; margin: 0; padding: 12px; text-align: center; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted);">Belum ada penghargaan. Klik tombol di bawah untuk menambahkan.</p>'
+        : currentAwardsList.map((aw, idx) => `
+            <div class="award-card" data-index="${idx}">
+                <div class="award-card__header">
+                    <div class="award-card__badge">#${idx + 1}</div>
+                    <div class="award-card__title">${esc(aw.penghargaan || 'Belum diisi')}</div>
+                    <div class="award-card__actions">
+                        <button type="button" class="btn-icon-edit btn-edit-award" data-index="${idx}" title="Edit Penghargaan">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        </button>
+                        <button type="button" class="btn-icon-delete btn-remove-award" data-index="${idx}" title="Hapus Penghargaan">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="award-card__body ${aw._editing ? 'is-editing' : ''}">
+                    ${aw._editing ? `
+                        <div class="field">
+                            <label>Nama Penghargaan</label>
+                            <input type="text" class="aw-name" value="${esc(aw.penghargaan || '')}" placeholder="Contoh: Narasumber Sosialisasi Pemilu 2024" required />
+                        </div>
+                        <div class="field">
+                            <label>Bukti PDF</label>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="file" class="aw-file" accept=".pdf" style="flex: 1;" />
+                                ${aw.bukti ? `<span class="file-indicator">File tersimpan</span>` : ''}
+                            </div>
+                            ${aw.bukti ? `<small class="muted">File saat ini: ${aw.bukti.split('/').pop()}</small>` : ''}
+                        </div>
+                        <div class="award-card__edit-actions">
+                            <button type="button" class="btn btn--ghost btn-cancel-edit" data-index="${idx}">Batal</button>
+                            <button type="button" class="btn btn--primary btn-save-edit" data-index="${idx}">Simpan</button>
+                        </div>
+                    ` : `
+                        <div class="award-card__info">
+                            ${aw.bukti ? `
+                                <a href="${esc(aw.bukti)}" target="_blank" class="award-card__link">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                    Lihat Bukti PDF
+                                </a>
+                            ` : `
+                                <span class="award-card__no-proof">Belum ada bukti</span>
+                            `}
+                        </div>
+                    `}
+                </div>
+            </div>
+        `).join('');
+}
+
 function openModal(id = null) {
     const form = $('#dataForm');
     if (!form) return;
     form.reset();
     $('#formRowId').value = '';
     $('#modalTitle').textContent = id ? 'Edit Data' : 'Tambah Data';
+    
+    // Reset foto - tampilkan avatar dengan inisial
+    pendingPhotoFile = null;
+    const photoPreview = $('#photoPreview');
+    if (!photoPreview) return;
+    
+    let photoImg = photoPreview.querySelector('.avatar__img');
+    let initials = photoPreview.querySelector('.avatar__initials');
+    
+    // Remove existing img if any
+    if (photoImg) {
+        photoImg.remove();
+        photoImg = null;
+    }
+    
+    // Ensure initials element exists
+    if (!initials) {
+        initials = document.createElement('span');
+        initials.className = 'avatar__initials';
+        initials.style.fontSize = '48px';
+        initials.style.fontWeight = '700';
+        initials.style.color = 'var(--brand)';
+        photoPreview.appendChild(initials);
+    }
+    
+    photoPreview.style.display = 'flex';
+    initials.style.display = 'flex';
+    $('#iFotoPath').value = '';
+    
+    currentAwardsList = [];
+    currentPersonId = id;
+    currentPersonName = '';
 
     if (id) {
         const rec = state.all.find((r) => r._id === id);
         if (rec) {
+            console.log('[openModal] Record:', rec.nama, 'Foto:', rec.foto);
+            
+            currentPersonName = rec.nama || '';
             $('#formRowId').value = id;
             $('#iNama').value = rec.nama || '';
             $('#iProvinsi').value = rec.provinsi || '';
@@ -753,8 +906,60 @@ function openModal(id = null) {
             $('#iFacebook').value = rec.facebook || '';
             $('#iInstagram').value = rec.instagram || '';
             $('#iWebsite').value = rec.website || '';
+            $('#iFotoPath').value = rec.foto || '';
+            
+            // Update inisial
+            const namaValue = rec.nama || '';
+            initials.textContent = UI.initials(namaValue);
+            
+            // Set foto preview jika ada - PERBAIKAN: Load setelah semua field di-set
+            if (rec.foto && rec.foto.trim()) {
+                console.log('[openModal] Loading foto:', rec.foto);
+                
+                // Hide initials immediately
+                initials.style.display = 'none';
+                
+                const img = document.createElement('img');
+                img.className = 'avatar__img';
+                img.alt = 'Preview';
+                img.style.position = 'absolute';
+                img.style.inset = '0';
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.objectFit = 'cover';
+                
+                img.onload = () => {
+                    console.log('[openModal] Foto loaded successfully');
+                };
+                
+                img.onerror = (e) => {
+                    console.error('[openModal] Foto gagal dimuat:', rec.foto, e);
+                    img.remove();
+                    initials.style.display = 'flex';
+                };
+                
+                photoPreview.style.position = 'relative';
+                photoPreview.appendChild(img);
+                
+                // Set src AFTER appending to DOM
+                img.src = rec.foto;
+            } else {
+                console.log('[openModal] Tidak ada foto, tampilkan inisial');
+                initials.style.display = 'flex';
+            }
+
+            // Copy awards
+            if (rec._awards) {
+                currentAwardsList = rec._awards.map(a => ({ ...a }));
+            }
         }
+    } else {
+        // Mode tambah data baru - tampilkan inisial default
+        initials.textContent = 'MA';
+        photoPreview.style.display = 'flex';
     }
+    
+    renderAwardsForm();
     $('#modalForm').hidden = false;
     document.body.style.overflow = 'hidden';
 }
@@ -765,12 +970,122 @@ function closeModal() {
     document.body.style.overflow = '';
 }
 
-function saveData() {
+async function handlePhotoUpload(nama) {
+    if (!pendingPhotoFile) return $('#iFotoPath').value;
+    
+    const formData = new FormData();
+    formData.append('photo', pendingPhotoFile);
+    formData.append('nama', nama);
+    
+    try {
+        const res = await fetch('/api/upload-photo', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.ok) return data.path;
+        UI.toast('Gagal upload foto: ' + data.error, 'warn');
+        return $('#iFotoPath').value;
+    } catch (e) {
+        console.error(e);
+        UI.toast('Kesalahan koneksi saat upload foto.', 'warn');
+        return $('#iFotoPath').value;
+    }
+}
+
+async function handlePhotoRename(oldName, newName) {
+    if (!oldName || !newName || oldName === newName) return;
+    try {
+        await fetch('/api/rename-photo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ oldName, newName })
+        });
+    } catch (e) {
+        console.error('Gagal rename foto', e);
+    }
+}
+
+async function saveAwardsList(kabkota, nama, jabatan) {
+    const newAwards = [];
+    
+    // Process dari currentAwardsList (bukan dari DOM)
+    for (let i = 0; i < currentAwardsList.length; i++) {
+        const award = currentAwardsList[i];
+        let bukti = award.bukti || '';
+        
+        // Upload file jika ada pending file
+        if (award._pendingFile) {
+            const formData = new FormData();
+            formData.append('proof', award._pendingFile);
+            formData.append('nama', nama);
+            formData.append('kabkota', kabkota);
+            try {
+                const res = await fetch('/api/upload-proof', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.ok) bukti = data.path;
+            } catch (e) {
+                console.error('Gagal upload bukti', e);
+                UI.toast('Gagal upload bukti penghargaan ' + (i + 1), 'warn');
+            }
+        }
+
+        newAwards.push({
+            kabkota: kabkota,
+            nama: nama,
+            jabatan: jabatan,
+            penghargaan: award.penghargaan,
+            bukti: bukti,
+            kategori: award.kategori || '' // Pertahankan kategori lama atau auto-detect nanti
+        });
+    }
+
+    // Ambil data penghargaan.json, ubah entri untuk orang ini
+    try {
+        const res = await fetch('/data/penghargaan.json?t=' + Date.now());
+        const allAwards = await res.json();
+        
+        const targetRegion = regionKey(kabkota);
+        const targetName = nameKey(nama);
+        const oldTargetName = nameKey(currentPersonName);
+        
+        // Hapus data lama orang ini
+        const filtered = allAwards.filter(a => {
+            const r = regionKey(a.kabkota || a['Kab/Kota']);
+            const n = nameKey(a.nama || a.Nama);
+            if (r === targetRegion && (n === targetName || n === oldTargetName)) return false;
+            return true;
+        });
+        
+        // Tambahkan data baru
+        const finalAwards = [...filtered, ...newAwards];
+        
+        await fetch('/api/save-awards', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ awards: finalAwards })
+        });
+    } catch (e) {
+        console.error('Gagal menyimpan penghargaan', e);
+    }
+}
+
+async function saveData() {
+    UI.showState('loading', 'Menyimpan data...');
     const id = $('#formRowId').value;
+    const newNama = $('#iNama').value;
+    const newKabkota = $('#iKabkota').value;
+    
+    // Handle rename & upload foto
+    if (id && currentPersonName && currentPersonName !== newNama) {
+        await handlePhotoRename(currentPersonName, newNama);
+    }
+    const finalFotoPath = await handlePhotoUpload(newNama);
+    
+    // Handle awards
+    await saveAwardsList(newKabkota, newNama, $('#iJabatan').value);
+    
     const newData = {
-        nama: $('#iNama').value,
+        nama: newNama,
         provinsi: $('#iProvinsi').value,
-        kabkota: $('#iKabkota').value,
+        kabkota: newKabkota,
         gender: $('#iGender').value,
         agama: $('#iAgama').value,
         pendidikan: $('#iPendidikan').value,
@@ -785,7 +1100,8 @@ function saveData() {
         facebook: $('#iFacebook').value,
         instagram: $('#iInstagram').value,
         website: $('#iWebsite').value,
-        _search: [$('#iNama').value, $('#iJabatan').value, $('#iProvinsi').value, $('#iKabkota').value].join(' ').toLowerCase()
+        foto: finalFotoPath,
+        _search: [newNama, $('#iJabatan').value, $('#iProvinsi').value, newKabkota].join(' ').toLowerCase()
     };
 
     if (id) {
@@ -793,8 +1109,6 @@ function saveData() {
         if (index !== -1) {
             state.all[index] = { ...state.all[index], ...newData };
         }
-        setRecords(state.all);
-        UI.toast('Data berhasil diperbarui.', 'success');
     } else {
         const newId = 'row-new-' + Date.now();
         const newRecord = { 
@@ -804,22 +1118,26 @@ function saveData() {
             ...newData 
         };
         state.all.unshift(newRecord);
-        setRecords(state.all);
-        UI.toast('Data baru berhasil ditambahkan.', 'success');
     }
 
+    await syncToServer();
     closeModal();
-    render();
-    syncToServer();
+    // Panggil reload supaya data penghargaan termuat kembali dan ngelink dengan benar
+    await reload({ force: true });
+    UI.toast('Data berhasil disimpan.', 'success');
 }
 
 async function syncToServer() {
     try {
         const rows = state.all.map((r) => {
             const obj = {};
+            // Schema FOTO tidak visible secara default, jadi kita harus sertakan explicitly
+            // karena ada field.hidden = true pada foto
             VISIBLE_FIELDS.forEach((f) => {
                 obj[f.label] = r[f.key] ?? '';
             });
+            // Manual assign hidden fields
+            obj['FOTO'] = r.foto ?? '';
             return obj;
         });
         
@@ -832,14 +1150,13 @@ async function syncToServer() {
         
         if (!response.ok) {
             UI.toast('Gagal menyimpan ke file Excel: ' + (resData.error || 'Unknown error'), 'warn');
-        } else {
-            UI.toast('Tersimpan permanen ke Excel.', 'success');
         }
     } catch (e) {
         console.error(e);
         UI.toast('Kesalahan koneksi saat menyimpan.', 'warn');
     }
 }
+
 
 function bindEvents() {
     $$('.tab').forEach((tab) => tab.addEventListener('click', () => {
@@ -951,6 +1268,130 @@ function bindEvents() {
 
     $('#modalForm')?.addEventListener('click', (e) => {
         if (e.target.hasAttribute('data-close-modal')) closeModal();
+        
+        // Edit award button
+        if (e.target.closest('.btn-edit-award')) {
+            const btn = e.target.closest('.btn-edit-award');
+            const idx = parseInt(btn.dataset.index, 10);
+            currentAwardsList[idx]._editing = true;
+            renderAwardsForm();
+            return;
+        }
+        
+        // Cancel edit
+        if (e.target.closest('.btn-cancel-edit')) {
+            const btn = e.target.closest('.btn-cancel-edit');
+            const idx = parseInt(btn.dataset.index, 10);
+            currentAwardsList[idx]._editing = false;
+            renderAwardsForm();
+            return;
+        }
+        
+        // Save edit
+        if (e.target.closest('.btn-save-edit')) {
+            const btn = e.target.closest('.btn-save-edit');
+            const idx = parseInt(btn.dataset.index, 10);
+            const card = btn.closest('.award-card');
+            const nameInput = card.querySelector('.aw-name');
+            const fileInput = card.querySelector('.aw-file');
+            
+            if (!nameInput.value.trim()) {
+                UI.toast('Nama penghargaan tidak boleh kosong', 'warn');
+                return;
+            }
+            
+            currentAwardsList[idx].penghargaan = nameInput.value.trim();
+            
+            // Handle file upload nanti saat save form
+            if (fileInput && fileInput.files.length > 0) {
+                currentAwardsList[idx]._pendingFile = fileInput.files[0];
+            }
+            
+            currentAwardsList[idx]._editing = false;
+            renderAwardsForm();
+            UI.toast('Perubahan disimpan (akan diupload saat save form)', 'success');
+            return;
+        }
+        
+        // Remove award button
+        if (e.target.closest('.btn-remove-award')) {
+            const btn = e.target.closest('.btn-remove-award');
+            const idx = parseInt(btn.dataset.index, 10);
+            
+            if (!confirm('Yakin ingin menghapus penghargaan ini?')) return;
+            
+            currentAwardsList.splice(idx, 1);
+            renderAwardsForm();
+            UI.toast('Penghargaan dihapus', 'success');
+            return;
+        }
+    });
+    
+    $('#btnAddAward')?.addEventListener('click', () => {
+        currentAwardsList.push({ 
+            penghargaan: '', 
+            bukti: '', 
+            kategori: '',
+            _editing: true // Langsung mode edit untuk entry baru
+        });
+        renderAwardsForm();
+        
+        // Focus ke input nama
+        setTimeout(() => {
+            const lastCard = $('#awardsContainer .award-card:last-child');
+            if (lastCard) {
+                const nameInput = lastCard.querySelector('.aw-name');
+                if (nameInput) nameInput.focus();
+            }
+        }, 100);
+    });
+
+    $('#iFotoFile')?.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        const photoPreview = $('#photoPreview');
+        if (!photoPreview) return;
+        
+        let photoImg = photoPreview.querySelector('.avatar__img');
+        let initials = photoPreview.querySelector('.avatar__initials');
+        
+        if (file) {
+            pendingPhotoFile = file;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                // Remove existing img if any
+                if (photoImg) {
+                    photoImg.remove();
+                }
+                
+                // Create new img
+                const img = document.createElement('img');
+                img.className = 'avatar__img';
+                img.alt = 'Preview';
+                img.src = e.target.result;
+                img.style.position = 'absolute';
+                img.style.inset = '0';
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.objectFit = 'cover';
+                
+                photoPreview.style.position = 'relative';
+                photoPreview.appendChild(img);
+                
+                if (initials) {
+                    initials.style.display = 'none';
+                }
+            };
+            reader.readAsDataURL(file);
+        } else {
+            pendingPhotoFile = null;
+            if (photoImg) {
+                photoImg.remove();
+            }
+            if (initials) {
+                initials.style.display = 'flex';
+            }
+        }
     });
 
     $('#dataForm')?.addEventListener('submit', (e) => {
@@ -1036,8 +1477,13 @@ async function reload({ force = false } = {}) {
         force ? 'Mengambil versi terbaru berkas data…' : 'Memuat data dari ' + APP_CONFIG.dataSource.url + ' …'
     );
     try {
-        const { records, issues, meta, fromCache } = await loadDataset({ force });
-        const linkage = attachAwards(records, await loadAwards({ force }));
+        // OPTIMASI: Load dataset dan awards secara parallel
+        const [{ records, issues, meta, fromCache }, awards] = await Promise.all([
+            loadDataset({ force }),
+            loadAwards({ force })
+        ]);
+        
+        const linkage = attachAwards(records, awards);
         setRecords(records, { issues, meta });
 
         const appName = $('#appName');
@@ -1073,15 +1519,7 @@ async function reload({ force = false } = {}) {
 }
 
 function start() {
-    if (!window.XLSX || !window.Chart) {
-        UI.showState(
-            'error',
-            'Pustaka pihak ketiga gagal dimuat.',
-            'Periksa koneksi internet, atau unduh chart.umd.min.js dan xlsx.full.min.js ke folder assets/vendor lalu ubah tautannya di index.html.'
-        );
-        return;
-    }
-    C.applyDefaults();
+    // Chart.js sekarang dimuat secara lazy, tidak perlu dicek di sini
     readUrl();
     bindEvents();
     reload();

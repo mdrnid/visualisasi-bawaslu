@@ -18,11 +18,14 @@
 'use strict';
 
 import express from 'express';
+import compression from 'compression';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import XLSX from 'xlsx';
+import multer from 'multer';
+import sharp from 'sharp';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,8 +35,11 @@ const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || '0.0.0.0';
 const APP_TOKEN = process.env.APP_TOKEN || '';
 const DATA_FILE = path.join(__dirname, 'data', 'data.xlsx');
+const DATA_CACHE_FILE = path.join(__dirname, 'data', '.data-cache.json');
 const AWARDS_FILE = path.join(__dirname, 'data', 'penghargaan.json');
 const BACKUP_DIR = path.join(__dirname, 'data', 'backup');
+const PHOTO_DIR = path.join(__dirname, 'assets', 'personel');
+const AWARDS_DIR = path.join(__dirname, 'assets', 'awards');
 const MAX_ROWS = 5000;
 const MAX_CELL_LENGTH = 500;
 
@@ -52,11 +58,50 @@ const KEY_TO_COLUMN = {
     facebook: 'FACEBOOK', instagram: 'INSTAGRAM', website: 'WEBSITE', foto: 'FOTO',
 };
 
+/** Slugify sederhana untuk penamaan berkas (replika dari text-utils.js). */
+function slugify(value) {
+    return String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+/** Konfigurasi multer: simpan ke memori, batas 10 MB. */
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        const allowed = /\.(jpe?g|png|webp|gif|pdf)$/i;
+        if (allowed.test(file.originalname) || file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+            cb(null, true);
+        } else {
+            cb(new Error('Tipe berkas tidak diizinkan.'));
+        }
+    },
+});
+
 app.disable('x-powered-by');
 
+// Gzip compression untuk semua response
+app.use(compression({
+    filter: (req, res) => {
+        // Compress semua kecuali yang sudah compressed (images, videos, dll)
+        if (req.headers['x-no-compression']) return false;
+        return compression.filter(req, res);
+    },
+    level: 6, // Balance antara speed dan compression ratio
+    threshold: 1024 // Hanya compress response > 1KB
+}));
+
 app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+        console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} - ${Date.now() - start}ms`);
+    });
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY'); // frame-ancestors diabaikan di <meta>
+    res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     next();
@@ -130,6 +175,126 @@ app.get('/data/penghargaan.json', requireAuth, (req, res) => {
     res.sendFile(AWARDS_FILE);
 });
 
+// ---------- Data JSON Fast Endpoint with Persistent Cache ----------
+let cachedDataGrid = null;
+let lastDataModTime = 0;
+
+/**
+ * Baca cache dari file system. Cache valid selama mtime Excel tidak berubah.
+ * Format cache: { mtime: number, data: { grid, sheetName, lastModified } }
+ */
+function readPersistentCache() {
+    try {
+        if (!fs.existsSync(DATA_CACHE_FILE)) return null;
+        
+        const cacheContent = fs.readFileSync(DATA_CACHE_FILE, 'utf-8');
+        const cache = JSON.parse(cacheContent);
+        
+        const dataStat = fs.statSync(DATA_FILE);
+        if (cache.mtime === dataStat.mtimeMs) {
+            console.log('[cache] ✓ Persistent cache HIT - Excel belum berubah');
+            return cache.data;
+        }
+        
+        console.log('[cache] ✗ Persistent cache MISS - Excel telah diupdate');
+        return null;
+    } catch (err) {
+        console.warn('[cache] Gagal membaca persistent cache:', err.message);
+        return null;
+    }
+}
+
+/**
+ * Simpan hasil parsing ke file system untuk persistent cache.
+ */
+function writePersistentCache(data) {
+    try {
+        const dataStat = fs.statSync(DATA_FILE);
+        const cache = {
+            mtime: dataStat.mtimeMs,
+            data,
+            cachedAt: new Date().toISOString()
+        };
+        
+        fs.writeFileSync(DATA_CACHE_FILE, JSON.stringify(cache), 'utf-8');
+        console.log('[cache] ✓ Persistent cache SAVED');
+    } catch (err) {
+        console.warn('[cache] Gagal menyimpan persistent cache:', err.message);
+    }
+}
+
+/**
+ * Invalidate cache saat data Excel berubah.
+ */
+function invalidatePersistentCache() {
+    try {
+        if (fs.existsSync(DATA_CACHE_FILE)) {
+            fs.unlinkSync(DATA_CACHE_FILE);
+            console.log('[cache] ✓ Persistent cache INVALIDATED');
+        }
+    } catch (err) {
+        console.warn('[cache] Gagal menghapus cache:', err.message);
+    }
+}
+
+app.get('/api/data', requireAuth, (req, res) => {
+    try {
+        if (!fs.existsSync(DATA_FILE)) {
+            return res.status(404).json({ ok: false, error: 'Berkas data tidak ditemukan.' });
+        }
+        
+        const stat = fs.statSync(DATA_FILE);
+        const mtime = stat.mtimeMs;
+        
+        // 1. Cek memory cache
+        if (cachedDataGrid && mtime === lastDataModTime) {
+            console.log('[cache] ✓ Memory cache HIT');
+            res.setHeader('X-Cache', 'HIT-MEMORY');
+            return res.json({ ok: true, data: cachedDataGrid });
+        }
+        
+        // 2. Cek persistent cache
+        const persistentCache = readPersistentCache();
+        if (persistentCache) {
+            cachedDataGrid = persistentCache;
+            lastDataModTime = mtime;
+            res.setHeader('X-Cache', 'HIT-DISK');
+            return res.json({ ok: true, data: cachedDataGrid });
+        }
+        
+        // 3. Parse Excel (cache MISS)
+        console.log('[cache] ✗ Cache MISS - Parsing Excel...');
+        const startTime = Date.now();
+        
+        const workbook = XLSX.readFile(DATA_FILE, { cellDates: true });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        
+        if (!sheet) {
+            return res.status(500).json({ ok: false, error: 'Sheet tidak ditemukan.' });
+        }
+        
+        const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '', raw: false });
+        
+        cachedDataGrid = { grid, sheetName, lastModified: new Date(mtime).toISOString() };
+        lastDataModTime = mtime;
+        
+        // Simpan ke persistent cache
+        writePersistentCache(cachedDataGrid);
+        
+        const parseTime = Date.now() - startTime;
+        console.log(`[cache] ✓ Excel parsed in ${parseTime}ms (${grid.length} rows)`);
+        
+        res.setHeader('X-Cache', 'MISS');
+        res.setHeader('X-Parse-Time', parseTime.toString());
+        res.json({ ok: true, data: cachedDataGrid });
+        
+    } catch (err) {
+        console.error('[server] gagal membaca excel:', err);
+        res.status(500).json({ ok: false, error: 'Gagal membaca data Excel.' });
+    }
+});
+
 // ---------- Simpan ----------
 app.use(express.json({ limit: '1mb' }));
 
@@ -181,8 +346,155 @@ app.post('/api/save', requireAuth, (req, res) => {
     const tmp = DATA_FILE + '.' + process.pid + '.tmp';
     XLSX.writeFile(book, tmp);
     fs.renameSync(tmp, DATA_FILE);
+    
+    // Clear cache (memory & persistent)
+    cachedDataGrid = null;
+    lastDataModTime = 0;
+    invalidatePersistentCache();
 
     res.json({ ok: true, rows: data.length, savedAt: new Date().toISOString() });
+});
+
+// ---------- Upload Foto Personel ----------
+
+app.post('/api/upload-photo', requireAuth, upload.single('photo'), async (req, res) => {
+    try {
+        const nama = String(req.body?.nama ?? '').trim();
+        if (!nama) return res.status(400).json({ ok: false, error: 'Nama personel wajib diisi.' });
+        if (!req.file) return res.status(400).json({ ok: false, error: 'Berkas foto tidak ditemukan.' });
+
+        const slug = slugify(nama);
+        if (!slug) return res.status(400).json({ ok: false, error: 'Nama tidak valid untuk slug.' });
+
+        fs.mkdirSync(PHOTO_DIR, { recursive: true });
+
+        const filename = slug + '.webp';
+        const destPath = path.join(PHOTO_DIR, filename);
+
+        // Konversi ke WebP, resize maksimal 400x400, kualitas 80
+        await sharp(req.file.buffer)
+            .resize(400, 400, { fit: 'cover', position: 'top' })
+            .webp({ quality: 80 })
+            .toFile(destPath);
+
+        // Update manifes foto jika ada
+        const manifestPath = path.join(PHOTO_DIR, 'index.json');
+        try {
+            let manifest = [];
+            if (fs.existsSync(manifestPath)) {
+                manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+            }
+            if (!manifest.includes(filename)) {
+                manifest.push(filename);
+                manifest.sort();
+                fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+            }
+        } catch (manifestErr) {
+            console.warn('[server] gagal update manifes foto:', manifestErr.message);
+        }
+
+        const relativePath = 'assets/personel/' + filename;
+        res.json({ ok: true, path: relativePath, filename });
+    } catch (err) {
+        console.error('[server] upload foto gagal:', err);
+        res.status(500).json({ ok: false, error: 'Gagal memproses foto: ' + err.message });
+    }
+});
+
+// ---------- Rename Foto (saat nama personel berubah) ----------
+
+app.post('/api/rename-photo', requireAuth, express.json(), (req, res) => {
+    const oldName = String(req.body?.oldName ?? '').trim();
+    const newName = String(req.body?.newName ?? '').trim();
+    if (!oldName || !newName) return res.status(400).json({ ok: false, error: 'oldName dan newName wajib diisi.' });
+
+    const oldSlug = slugify(oldName);
+    const newSlug = slugify(newName);
+    if (!oldSlug || !newSlug) return res.status(400).json({ ok: false, error: 'Nama tidak valid.' });
+    if (oldSlug === newSlug) return res.json({ ok: true, renamed: false, message: 'Nama sama, tidak perlu rename.' });
+
+    const oldPath = path.join(PHOTO_DIR, oldSlug + '.webp');
+    const newPath = path.join(PHOTO_DIR, newSlug + '.webp');
+
+    if (!fs.existsSync(oldPath)) return res.json({ ok: true, renamed: false, message: 'Foto lama tidak ditemukan.' });
+
+    try {
+        fs.renameSync(oldPath, newPath);
+
+        // Update manifes
+        const manifestPath = path.join(PHOTO_DIR, 'index.json');
+        try {
+            if (fs.existsSync(manifestPath)) {
+                let manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+                manifest = manifest.filter((f) => f !== oldSlug + '.webp');
+                if (!manifest.includes(newSlug + '.webp')) manifest.push(newSlug + '.webp');
+                manifest.sort();
+                fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+            }
+        } catch (_) { /* abaikan */ }
+
+        res.json({ ok: true, renamed: true, newPath: 'assets/personel/' + newSlug + '.webp' });
+    } catch (err) {
+        console.error('[server] rename foto gagal:', err);
+        res.status(500).json({ ok: false, error: 'Gagal rename foto.' });
+    }
+});
+
+// ---------- Simpan Data Penghargaan ----------
+
+app.post('/api/save-awards', requireAuth, (req, res) => {
+    const awards = req.body?.awards;
+    if (!Array.isArray(awards)) return res.status(400).json({ ok: false, error: 'Body harus { awards: [...] }.' });
+
+    // Backup penghargaan.json lama
+    const backupDir = path.join(__dirname, 'data', 'backup');
+    fs.mkdirSync(backupDir, { recursive: true });
+    if (fs.existsSync(AWARDS_FILE)) {
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        fs.copyFileSync(AWARDS_FILE, path.join(backupDir, 'penghargaan-' + stamp + '.json'));
+    }
+
+    // Simpan atomik
+    const tmp = AWARDS_FILE + '.' + process.pid + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(awards, null, 4), 'utf-8');
+    fs.renameSync(tmp, AWARDS_FILE);
+
+    res.json({ ok: true, count: awards.length, savedAt: new Date().toISOString() });
+});
+
+// ---------- Upload Bukti Penghargaan ----------
+
+app.post('/api/upload-proof', requireAuth, upload.single('proof'), (req, res) => {
+    try {
+        const kabkota = String(req.body?.kabkota ?? '').trim();
+        const nama = String(req.body?.nama ?? '').trim();
+        if (!nama) return res.status(400).json({ ok: false, error: 'Nama personel wajib diisi.' });
+        if (!req.file) return res.status(400).json({ ok: false, error: 'Berkas bukti tidak ditemukan.' });
+
+        const regionSlug = slugify(kabkota) || 'unknown';
+        const nameSlug = slugify(nama);
+        if (!nameSlug) return res.status(400).json({ ok: false, error: 'Nama tidak valid.' });
+
+        const destDir = path.join(AWARDS_DIR, regionSlug, nameSlug);
+        fs.mkdirSync(destDir, { recursive: true });
+
+        // Sanitasi nama berkas asli
+        const origExt = path.extname(req.file.originalname).toLowerCase() || '.pdf';
+        const safeName = req.file.originalname
+            .replace(/[^a-zA-Z0-9._-]/g, '_')
+            .replace(/_{2,}/g, '_')
+            .slice(0, 100);
+        const filename = safeName.endsWith(origExt) ? safeName : safeName + origExt;
+        const destPath = path.join(destDir, filename);
+
+        fs.writeFileSync(destPath, req.file.buffer);
+
+        const relativePath = 'assets/awards/' + regionSlug + '/' + nameSlug + '/' + filename;
+        res.json({ ok: true, path: relativePath, filename });
+    } catch (err) {
+        console.error('[server] upload bukti gagal:', err);
+        res.status(500).json({ ok: false, error: 'Gagal menyimpan bukti: ' + err.message });
+    }
 });
 
 app.use((req, res) => res.status(404).type('text/plain').send('404 Not Found'));

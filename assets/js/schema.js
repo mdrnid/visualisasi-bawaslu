@@ -214,6 +214,21 @@ export function normalizeRecord(raw, index, cc = '62') {
                 rec[f.key] = s;
         }
     }
+    
+    // AUTO-RESOLVE FOTO: Jika kolom foto kosong, generate path berdasarkan nama
+    if (!rec.foto && rec.nama) {
+        const slugNama = slug(rec.nama);
+        if (slugNama) {
+            rec.foto = 'assets/personel/' + slugNama + '.webp';
+        }
+    }
+    
+    // Perbaikan: jika kabkota sama dengan provinsi, ubah menjadi format "Provinsi [Nama]"
+    // untuk membedakan data Bawaslu Provinsi dengan Kabupaten/Kota
+    if (rec.provinsi && rec.kabkota && 
+        slug(rec.provinsi) === slug(rec.kabkota)) {
+        rec.kabkota = 'Provinsi ' + rec.provinsi;
+    }
     const filled = COMPLETENESS_KEYS.filter((k) => rec[k]).length;
     rec._completeness = Math.round((filled / COMPLETENESS_KEYS.length) * 100);
     rec._search = FIELDS.filter((f) => f.searchable)

@@ -6,6 +6,7 @@ import {
     normPhone,
     validateRecord,
     isBlank,
+    normalizeRecord,
 } from '../assets/js/schema.js';
 
 describe('schema.js Data Contract', () => {
@@ -74,6 +75,34 @@ describe('schema.js Data Contract', () => {
             expect(issues.some((i) => i.field === 'Provinsi')).toBe(true);
             expect(issues.some((i) => i.field === 'E-mail Pribadi')).toBe(true);
             expect(issues.some((i) => i.field === 'Nomor HP/WhatsApp')).toBe(true);
+        });
+    });
+
+    describe('normalizeRecord()', () => {
+        it('should convert matching provinsi and kabkota to "Provinsi [Name]" format', () => {
+            const raw = {
+                provinsi: 'SULAWESI SELATAN',
+                kabkota: 'SULAWESI SELATAN',
+                nama: 'MARDIANA RUSLI',
+                __row: 83,
+            };
+            const normalized = normalizeRecord(raw, 0);
+            expect(normalized.provinsi).toBe('Sulawesi Selatan');
+            expect(normalized.kabkota).toBe('Provinsi Sulawesi Selatan');
+            expect(normalized.nama).toBe('Mardiana Rusli');
+        });
+
+        it('should keep different kabkota values unchanged', () => {
+            const raw = {
+                provinsi: 'SULAWESI SELATAN',
+                kabkota: 'BONE',
+                nama: 'ALWI',
+                __row: 8,
+            };
+            const normalized = normalizeRecord(raw, 0);
+            expect(normalized.provinsi).toBe('Sulawesi Selatan');
+            expect(normalized.kabkota).toBe('Bone');
+            expect(normalized.nama).toBe('Alwi');
         });
     });
 });
