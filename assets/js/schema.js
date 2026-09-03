@@ -106,7 +106,8 @@ export const COMPLETENESS_KEYS = Object.freeze([
 
 /* ---------- Pengenalan header ---------- */
 
-const slug = (v) =>
+// Fungsi slug untuk matching header Excel (UPPERCASE, no separator)
+const slugHeader = (v) =>
     String(v ?? '')
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, '');
@@ -137,7 +138,7 @@ const HEADER_RULES = [
 
 /** @returns {string|null} kunci kanonik untuk sebuah teks header. */
 export function mapHeader(raw) {
-    const n = slug(raw);
+    const n = slugHeader(raw);
     if (!n) return null;
     for (const [key, test] of HEADER_RULES) if (test(n)) return key;
     return null;
@@ -278,8 +279,9 @@ export function normalizeRecord(raw, index, cc = '62') {
     }
     
     // AUTO-RESOLVE FOTO: Jika kolom foto kosong, generate path berdasarkan nama
+    // Gunakan slugify (lowercase-with-dash) agar konsisten dengan upload foto di server
     if (!rec.foto && rec.nama) {
-        const slugNama = slug(rec.nama);
+        const slugNama = slugify(rec.nama);
         if (slugNama) {
             rec.foto = 'assets/personel/' + slugNama + '.webp';
         }
