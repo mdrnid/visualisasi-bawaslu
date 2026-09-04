@@ -734,16 +734,19 @@ function switchView(view) {
 /* ---------- Ekspor ---------- */
 
 async function exportExcel(rows) {
-    let xlsxLib = window.XLSX;
-    if (!xlsxLib) {
+    // Load XLSX library jika belum tersedia
+    if (!window.XLSX) {
         UI.toast('Menyiapkan library ekspor...', 'info');
         try {
-            xlsxLib = await import('https://cdn.sheetjs.com/xlsx-0.20.2/package/mjs/xlsx.mjs');
+            await loadXLSX();
         } catch (e) {
-            UI.toast('Gagal memuat library ekspor. Pastikan Anda terhubung ke internet.', 'error');
+            UI.toast('Gagal memuat library ekspor. Coba lagi.', 'error');
+            console.error('[export] Failed to load XLSX:', e);
             return;
         }
     }
+    
+    const xlsxLib = window.XLSX;
     
     const data = rows.map((r) => {
         const obj = {};
@@ -773,6 +776,24 @@ async function exportExcel(rows) {
     }
     xlsxLib.writeFile(wb, 'personel-' + new Date().toISOString().slice(0, 10) + '.xlsx');
     UI.toast('Berhasil mengekspor ' + rows.length + ' baris ke Excel.', 'success');
+}
+
+/** Load XLSX library via script tag */
+function loadXLSX() {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js';
+        script.onload = () => {
+            if (window.XLSX) {
+                console.log('[export] ✓ XLSX library loaded');
+                resolve();
+            } else {
+                reject(new Error('XLSX not available on window'));
+            }
+        };
+        script.onerror = () => reject(new Error('Failed to load script'));
+        document.head.appendChild(script);
+    });
 }
 
 /* ---------- Event binding ---------- */

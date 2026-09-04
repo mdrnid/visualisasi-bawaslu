@@ -126,7 +126,7 @@ app.use((req, res, next) => {
     // Allow CDN for Chart.js (jsdelivr) untuk sementara
     res.setHeader('Content-Security-Policy', [
         "default-src 'self'",
-        "script-src 'self' https://cdn.jsdelivr.net",
+        "script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com",
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net", // Allow Cropper.js CSS
         "img-src 'self' data: blob:", // blob: untuk cropped image
         "font-src 'self'",
