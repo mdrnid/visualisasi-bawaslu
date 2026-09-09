@@ -4,13 +4,18 @@ coverage/
 project_evaluation.md
 
 # PII (Personally Identifiable Information) - WAJIB di .gitignore
-data/data.xlsx
-data/.data-cache.json
+.env
+.env.*
+*.xlsx
+**/*.xlsx
+.data-cache.json
+**/.data-cache.json
+penghargaan.json
+**/penghargaan.json
+assets/personel/
+assets/awards/
 data/backup/
-data/migrations/
-data/penghargaan.json
-assets/personel/*.webp
-assets/awards/*/
+reports/
 
 # Project-specific non-system files
 PROJECT_CODEBASE.md
