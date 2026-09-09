@@ -1,62 +1,44 @@
 # Direktori & Dashboard Personel
 
-Aplikasi web statis untuk menampilkan direktori personel dan analitiknya.
-Sumber data tunggal berupa satu berkas Excel di `data/data.xlsx`.
+Aplikasi web untuk menampilkan direktori personel dan analitiknya bagi Bawaslu Sulawesi Selatan.
+Sumber kebenaran data tunggal menggunakan **Supabase PostgreSQL (schema `api`)**. Berkas Excel berfungsi sebagai format import, export, dan backup offline.
 
 ## Fitur Utama
 
 - **Analitik & Ringkasan**: Dashboard visual sebaran personel, agama, pendidikan, jabatan, dan kelengkapan atribut menggunakan Chart.js.
 - **Direktori & Pencarian**: Pencarian cepat berbasis nama, jabatan, kontak, email, instansi, atau alamat.
 - **Kualitas Data**: Deteksi otomatis data kosong (kesalahan) atau data duplikat (peringatan).
-- **Keamanan PII**: Menggunakan `sessionStorage` dengan pengkodean data, sehingga data sensitif terhapus otomatis saat tab ditutup dan terlindung dari ekstensi browser nakal.
+- **Backend Berbasis Supabase**: Data tersimpan aman di PostgreSQL dengan Row Level Security (RLS) dan schema terisolasi.
 - **Aksesibilitas (ARIA)**: Sepenuhnya mematuhi standar aksesibilitas keyboard dan pembaca layar.
 
 ## Menjalankan secara lokal
 
-### 🚀 Cara Tercepat (Windows):
-
-**Langsung jalankan (auto-close terminal):**
-```batch
-start.bat
-```
-Server langsung jalan di background, terminal otomatis tertutup.
-
-**Atau menggunakan Control Panel:**
-```batch
-bawaslu.bat
-```
-Menu interaktif untuk semua operasi server.
-
-**Pilihan lainnya:**
-```batch
-start-window.bat       # Lihat log di window terpisah
-start-local.bat        # Server lokal tanpa tunnel
+### 1. Konfigurasi Environment (`.env`)
+Salin atau isi kredensial Supabase di `.env`:
+```env
+HOST=127.0.0.1
+PORT=8080
+APP_TOKEN=bawaslu2024
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_ANON_KEY=your-anon-key
 ```
 
-**Menghentikan server:**
-```batch
-stop.bat               # Hentikan server (auto-close)
-status.bat             # Cek status server
+### 2. Setup Database & Import Data
+Ikuti panduan lengkap di [docs/runbook-migrasi.md](docs/runbook-migrasi.md):
+```bash
+# Eksekusi skema database sekali di Supabase Dashboard (SQL Editor)
+# Menggunakan file: supabase/SETUP_ALL_ONE_CLICK.sql
+
+# Import data dari file Excel lama ke Supabase Postgres:
+node scripts/import-xlsx.mjs --commit
 ```
 
-> 📚 **Dokumentasi lengkap**: Lihat [SCRIPTS_GUIDE.md](SCRIPTS_GUIDE.md) atau [QUICK_START.txt](QUICK_START.txt)
-
-### 🐧 Cara Manual (Cross-platform):
-
-Jalankan perintah berikut:
-
+### 3. Menjalankan Server
 ```bash
 npm install        # Pasang dependensi
-npm run dev        # Jalankan server lokal di http://localhost:8080
+npm run dev        # Jalankan server lokal di http://127.0.0.1:8080
 ```
-
-Atau tanpa Node.js (untuk sekadar melihat dashboard):
-
-```bash
-python3 -m http.server 8080
-```
-
-> **PENTING**: Jangan membuka `index.html` langsung dari berkas (`file://`) — browser memblokir pembacaan berkas data melalui protokol tersebut.
 
 ## Penjaminan Kualitas & Pengujian
 
