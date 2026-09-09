@@ -619,42 +619,51 @@ async function renderCharts(rows) {
     
     C.applyDefaults();
     
-    // Data preparation (sync, cepat)
-    const prov = A.countBy(rows, 'provinsi');
-    const kabkota = A.countBy(rows, 'kabkota');
-    const gender = A.countBy(rows, 'gender');
-    const pendidikan = A.countBy(rows, 'pendidikan', { sort: 'label' });
-    const jabatan = A.countBy(rows, 'jabatan', { limit: APP_CONFIG.ui.topJabatan });
-    const divisi = A.countBy(rows, 'div');
-    const agama = A.countBy(rows, 'agama');
-    const kelengkapan = A.completeness(rows);
-    const silang = A.crossTab(rows, 'provinsi', 'pendidikan', { rowLimit: 12 });
+    // Split data
+    const provRows = rows.filter(r => (r.kabkota || '').toLowerCase().includes('provinsi'));
+    const kabRows = rows.filter(r => !(r.kabkota || '').toLowerCase().includes('provinsi'));
+
+    // Data preparation (Provinsi)
+    const jabatanProv = A.countBy(provRows, 'jabatan', { limit: 12 });
+    const pendidikanProv = A.countBy(provRows, 'pendidikan', { sort: 'label' });
+
+    // Data preparation (Kab/Kota)
+    const kabkota = A.countBy(kabRows, 'kabkota');
+    const gender = A.countBy(rows, 'gender'); // Gender keseluruhan
+    const pendidikanKab = A.countBy(kabRows, 'pendidikan', { sort: 'label' });
+    const jabatanKab = A.countBy(kabRows, 'jabatan', { limit: APP_CONFIG.ui.topJabatan });
+    const divisiKab = A.countBy(kabRows, 'div');
+    const agama = A.countBy(rows, 'agama'); // Keseluruhan
+
+    const silangKab = A.crossTab(kabRows, 'kabkota', 'pendidikan', { rowLimit: 12 });
     
     // Update hint text (instant)
-    const hintProv = $('#hintProv');
-    if (hintProv) hintProv.textContent = prov.labels.length + ' provinsi';
     const hintKabkota = $('#hintKabkota');
     if (hintKabkota) hintKabkota.textContent = kabkota.labels.length + ' kab/kota';
     
     // Batch 1: Chart penting (above the fold)
     const renderBatch1 = () => {
-        C.barChart('chProvinsi', prov, { horizontal: prov.labels.length > 7 });
+        // Provinsi
+        C.donutChart('chJabatanProv', jabatanProv);
+        C.barChart('chPendidikanProv', pendidikanProv, { horizontal: true, color: C.PALETTE[2] });
+        
+        // Kab Kota
         C.barChart('chKabkota', kabkota, { horizontal: kabkota.labels.length > 7 });
     };
     
     // Batch 2: Chart sekunder
     const renderBatch2 = () => {
         C.donutChart('chGender', gender);
-        C.donutChart('chPendidikan', pendidikan);
-        C.barChart('chJabatan', jabatan, { horizontal: true, color: C.PALETTE[1] });
+        C.donutChart('chPendidikan', pendidikanKab);
+        C.barChart('chJabatan', jabatanKab, { horizontal: true, color: C.PALETTE[1] });
     };
     
     // Batch 3: Chart tambahan
     const renderBatch3 = () => {
-        C.barChart('chPenugasan', divisi, { color: C.PALETTE[4], horizontal: true });
-        C.barChart('chAgama', agama, { color: C.PALETTE[2] });
-        C.percentBar('chKelengkapan', kelengkapan);
-        C.stackedBar('chSilang', silang);
+        C.barChart('chPenugasan', divisiKab, { color: C.PALETTE[4], horizontal: true });
+        C.barChart('chAgama', agama, { color: C.PALETTE[3] });
+
+        C.stackedBar('chSilang', silangKab);
     };
     
     // Render secara progresif menggunakan requestIdleCallback atau setTimeout
@@ -687,8 +696,15 @@ async function render({ syncUrl = true } = {}) {
     if (searchInput) searchInput.value = state.filters.q;
 
     if (state.view === 'overview') {
+        // Split data untuk KPI
+        const provRows = rows.filter(r => (r.kabkota || '').toLowerCase().includes('provinsi'));
+        const kabRows = rows.filter(r => !(r.kabkota || '').toLowerCase().includes('provinsi'));
+        const allProvRows = state.all.filter(r => (r.kabkota || '').toLowerCase().includes('provinsi'));
+        const allKabRows = state.all.filter(r => !(r.kabkota || '').toLowerCase().includes('provinsi'));
+
         // Render KPI dulu (instant, non-blocking)
-        UI.renderKpis(A.kpis(rows, state.all));
+        UI.renderKpis('#kpiGridProv', A.kpis(provRows, allProvRows));
+        UI.renderKpis('#kpiGridKab', A.kpis(kabRows, allKabRows));
         
         // Chart di-render secara async dan progresif
         renderCharts(rows);
@@ -1616,6 +1632,17 @@ function bindEvents() {
 
     $('#btnAddData')?.addEventListener('click', () => {
         openModal();
+    });
+
+    $('#btnCredit')?.addEventListener('click', () => {
+        const modal = $('#modalCredit');
+        if (modal) modal.hidden = false;
+    });
+
+    $('#modalCredit')?.addEventListener('click', (e) => {
+        if (e.target.hasAttribute('data-close-credit')) {
+            $('#modalCredit').hidden = true;
+        }
     });
 
     $('#btnDeleteMode')?.addEventListener('click', () => {

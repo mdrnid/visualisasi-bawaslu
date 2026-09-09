@@ -225,7 +225,7 @@ app.use(
 );
 
 const page = (file) => (req, res) => res.sendFile(path.join(__dirname, file));
-app.get('/', requireAuth, page('index.html'));
+app.get('/', page('landing.html'));
 app.get('/index.html', requireAuth, page('index.html'));
 app.get('/landing.html', page('landing.html'));
 app.get('/landing.css', page('landing.css'));

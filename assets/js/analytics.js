@@ -81,6 +81,5 @@ export function kpis(records, allRecords) {
         { label: 'Laki-laki', value: male, hint: pct(male) + '% dari tampilan' },
         { label: 'Perempuan', value: female, hint: pct(female) + '% dari tampilan' },
         { label: 'Pascasarjana', value: pasca, hint: pct(pasca) + '% berpendidikan S2/S3' },
-        { label: 'Kelengkapan Profil', value: avgComplete + '%', hint: 'rata-rata atribut kontak terisi' },
     ];
 }

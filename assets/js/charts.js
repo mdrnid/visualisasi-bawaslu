@@ -63,12 +63,12 @@ export function applyDefaults() {
         return false;
     }
     const { Chart } = window;
-    Chart.defaults.font.family = "'Segoe UI', Inter, system-ui, sans-serif";
+    Chart.defaults.font.family = "Inter, 'Segoe UI', system-ui, sans-serif";
     Chart.defaults.font.size = 12;
-    Chart.defaults.color = '#5c6a80';
+    Chart.defaults.color = '#64748B';
     Chart.defaults.plugins.tooltip.padding = 10;
     Chart.defaults.plugins.tooltip.cornerRadius = 8;
-    Chart.defaults.animation.duration = 350;
+    Chart.defaults.animation.duration = 400;
     Chart.defaults.plugins.legend.position = 'bottom';
     Chart.defaults.maintainAspectRatio = false;
     return true;

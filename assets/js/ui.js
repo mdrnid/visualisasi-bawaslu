@@ -60,8 +60,8 @@ export function showError(err) {
     showState('error', err?.message || 'Terjadi kesalahan saat memuat data.', err?.hint || '');
 }
 
-export function renderKpis(items) {
-    const el = $('#kpiGrid');
+export function renderKpis(selector, items) {
+    const el = $(selector);
     if (!el) return;
     el.innerHTML = items
         .map(

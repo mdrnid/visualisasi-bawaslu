@@ -10,12 +10,16 @@
              object-src 'none';
              form-action 'self';
              script-src 'self' https://cdn.jsdelivr.net https://cdn.sheetjs.com;
-             style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+             style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com;
+             font-src 'self' https://fonts.gstatic.com;
              img-src 'self' data:;
              connect-src 'self';"
 /><!--  -->
-<title>Direktori &amp; Dashboard Personel</title>
+<title>BIPAL (Biodata Pengawas Pemilu)</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./assets/css/styles.css" />
 </head>
 <body>
@@ -28,16 +32,12 @@
   <img src="./assets/image/logo-bawaslu.webp" alt="Logo Bawaslu" class="brand__logo" width="40" height="40" decoding="async">
 </div>
       <div>
-        <h1 class="brand__title" id="appName">Direktori &amp; Dashboard Personel</h1>
+        <h1 class="brand__title" id="appName">BIPAL (Biodata Pengawas Pemilu)</h1>
         <p class="brand__sub" id="appOrg">Memuat sumber data…</p>
       </div>
     </div>
     <div class="appbar__actions">
-
-  <a href="landing.html" class="btn btn--home">
-    ← Halaman Utama
-  </a>
-
+  <!-- Removed landing link -->
   <button class="btn btn--ghost" id="btnRefresh" type="button">
     Muat Ulang Data
   </button>
@@ -82,13 +82,29 @@
 
   <!-- ============ RINGKASAN ============ -->
   <section class="view" id="view-overview" role="tabpanel" aria-labelledby="tab-overview" data-view="overview" hidden>
-    <div class="kpi-grid" id="kpiGrid"></div>
+    <div class="panel__head panel__head--bare" style="margin-bottom: 12px; margin-top: 24px;">
+      <h2 style="font-size: 18px; color: var(--brand-dark);">Tingkat Provinsi</h2>
+    </div>
+    <div class="kpi-grid" id="kpiGridProv" style="margin-bottom: 16px;"></div>
+    
     <div class="chart-grid">
       <article class="panel chart">
-        <header class="panel__head"><h2>Sebaran Personel per Provinsi</h2><span class="hint" id="hintProv"></span></header>
-        <div class="canvas-wrap canvas-wrap--tall"><canvas id="chProvinsi" aria-label="Grafik sebaran personel per provinsi"></canvas></div>
+        <header class="panel__head"><h2>Komposisi Jabatan (Provinsi)</h2></header>
+        <div class="canvas-wrap"><canvas id="chJabatanProv" aria-label="Grafik komposisi jabatan provinsi"></canvas></div>
       </article>
       <article class="panel chart">
+        <header class="panel__head"><h2>Jenjang Pendidikan (Provinsi)</h2></header>
+        <div class="canvas-wrap"><canvas id="chPendidikanProv" aria-label="Grafik jenjang pendidikan provinsi"></canvas></div>
+      </article>
+    </div>
+
+    <div class="panel__head panel__head--bare" style="margin-bottom: 12px; margin-top: 36px;">
+      <h2 style="font-size: 18px; color: var(--brand-dark);">Tingkat Kabupaten / Kota</h2>
+    </div>
+    <div class="kpi-grid" id="kpiGridKab" style="margin-bottom: 16px;"></div>
+
+    <div class="chart-grid">
+      <article class="panel chart chart--wide">
         <header class="panel__head"><h2>Sebaran Personel per Kab/Kota</h2><span class="hint" id="hintKabkota"></span></header>
         <div class="canvas-wrap canvas-wrap--tall"><canvas id="chKabkota" aria-label="Grafik sebaran personel per kabupaten atau kota"></canvas></div>
       </article>
@@ -100,27 +116,24 @@
         <div class="canvas-wrap"><canvas id="chGender" aria-label="Grafik komposisi jenis kelamin"></canvas></div>
       </article>
       <article class="panel chart">
-        <header class="panel__head"><h2>Jenjang Pendidikan</h2></header>
+        <header class="panel__head"><h2>Jenjang Pendidikan (Kab/Kota)</h2></header>
         <div class="canvas-wrap"><canvas id="chPendidikan" aria-label="Grafik jenjang pendidikan"></canvas></div>
       </article>
       <article class="panel chart">
-        <header class="panel__head"><h2>Distribusi Jabatan (Top 12)</h2></header>
+        <header class="panel__head"><h2>Distribusi Jabatan (Top 12 Kab/Kota)</h2></header>
         <div class="canvas-wrap"><canvas id="chJabatan" aria-label="Grafik distribusi jabatan"></canvas></div>
       </article>
       <article class="panel chart">
-        <header class="panel__head"><h2>Distribusi Divisi</h2><span class="hint">Jumlah per Divisi</span></header>
+        <header class="panel__head"><h2>Distribusi Divisi (Kab/Kota)</h2><span class="hint">Jumlah per Divisi</span></header>
         <div class="canvas-wrap"><canvas id="chPenugasan" aria-label="Grafik distribusi divisi"></canvas></div>
       </article>
       <article class="panel chart">
         <header class="panel__head"><h2>Komposisi Agama</h2></header>
         <div class="canvas-wrap"><canvas id="chAgama" aria-label="Grafik komposisi agama"></canvas></div>
       </article>
-      <article class="panel chart">
-        <header class="panel__head"><h2>Kelengkapan Atribut</h2><span class="hint">% terisi</span></header>
-        <div class="canvas-wrap"><canvas id="chKelengkapan" aria-label="Grafik kelengkapan atribut"></canvas></div>
-      </article>
+
       <article class="panel chart chart--wide">
-        <header class="panel__head"><h2>Pendidikan per Provinsi</h2><span class="hint">bertumpuk</span></header>
+        <header class="panel__head"><h2>Pendidikan per Kabupaten/Kota</h2><span class="hint">bertumpuk</span></header>
         <div class="canvas-wrap canvas-wrap--tall"><canvas id="chSilang" aria-label="Grafik silang pendidikan per provinsi"></canvas></div>
       </article>
     </div>
@@ -227,30 +240,30 @@
               <select id="iKabkota">
                 <option value="">Pilih Kab/Kota</option>
                 <option value="Provinsi Sulawesi Selatan">Provinsi Sulawesi Selatan</option>
-                <option value="Kabupaten Bantaeng">Kabupaten Bantaeng</option>
-                <option value="Kabupaten Barru">Kabupaten Barru</option>
-                <option value="Kabupaten Bone">Kabupaten Bone</option>
-                <option value="Kabupaten Bulukumba">Kabupaten Bulukumba</option>
-                <option value="Kabupaten Enrekang">Kabupaten Enrekang</option>
-                <option value="Kabupaten Gowa">Kabupaten Gowa</option>
-                <option value="Kabupaten Jeneponto">Kabupaten Jeneponto</option>
-                <option value="Kabupaten Kepulauan Selayar">Kabupaten Kepulauan Selayar</option>
-                <option value="Kabupaten Luwu">Kabupaten Luwu</option>
-                <option value="Kabupaten Luwu Timur">Kabupaten Luwu Timur</option>
-                <option value="Kabupaten Luwu Utara">Kabupaten Luwu Utara</option>
-                <option value="Kabupaten Maros">Kabupaten Maros</option>
-                <option value="Kabupaten Pangkajene dan Kepulauan">Kabupaten Pangkajene dan Kepulauan</option>
-                <option value="Kabupaten Pinrang">Kabupaten Pinrang</option>
-                <option value="Kabupaten Sidenreng Rappang">Kabupaten Sidenreng Rappang</option>
-                <option value="Kabupaten Sinjai">Kabupaten Sinjai</option>
-                <option value="Kabupaten Soppeng">Kabupaten Soppeng</option>
-                <option value="Kabupaten Takalar">Kabupaten Takalar</option>
-                <option value="Kabupaten Tana Toraja">Kabupaten Tana Toraja</option>
-                <option value="Kabupaten Toraja Utara">Kabupaten Toraja Utara</option>
-                <option value="Kabupaten Wajo">Kabupaten Wajo</option>
-                <option value="Kota Makassar">Kota Makassar</option>
-                <option value="Kota Palopo">Kota Palopo</option>
-                <option value="Kota Parepare">Kota Parepare</option>
+                <option value="Bantaeng">Kabupaten Bantaeng</option>
+                <option value="Barru">Kabupaten Barru</option>
+                <option value="Bone">Kabupaten Bone</option>
+                <option value="Bulukumba">Kabupaten Bulukumba</option>
+                <option value="Enrekang">Kabupaten Enrekang</option>
+                <option value="Gowa">Kabupaten Gowa</option>
+                <option value="Jeneponto">Kabupaten Jeneponto</option>
+                <option value="Kepulauan Selayar">Kabupaten Kepulauan Selayar</option>
+                <option value="Luwu">Kabupaten Luwu</option>
+                <option value="Luwu Timur">Kabupaten Luwu Timur</option>
+                <option value="Luwu Utara">Kabupaten Luwu Utara</option>
+                <option value="Maros">Kabupaten Maros</option>
+                <option value="Pangkajene dan Kepulauan">Kabupaten Pangkajene dan Kepulauan</option>
+                <option value="Pinrang">Kabupaten Pinrang</option>
+                <option value="Sidenreng Rappang">Kabupaten Sidenreng Rappang</option>
+                <option value="Sinjai">Kabupaten Sinjai</option>
+                <option value="Soppeng">Kabupaten Soppeng</option>
+                <option value="Takalar">Kabupaten Takalar</option>
+                <option value="Tana Toraja">Kabupaten Tana Toraja</option>
+                <option value="Toraja Utara">Kabupaten Toraja Utara</option>
+                <option value="Wajo">Kabupaten Wajo</option>
+                <option value="Makassar">Kota Makassar</option>
+                <option value="Palopo">Kota Palopo</option>
+                <option value="Parepare">Kota Parepare</option>
               </select>
             </div>
         </div>
@@ -266,7 +279,7 @@
             <select id="iAgama">
               <option value="">Pilih...</option>
               <option value="Islam">Islam</option>
-              <option value="Kristen">Kristen</option>
+              <option value="Kristen">Kristen Protestan</option>
               <option value="Katolik">Katolik</option>
               <option value="Hindu">Hindu</option>
               <option value="Buddha">Buddha</option>
@@ -300,14 +313,7 @@
         </div>
 
         <h3 style="font-size: 13px; margin: 10px 0 0; color: var(--brand); border-bottom: 1px solid var(--line); padding-bottom: 4px;">Jabatan</h3>
-        <div class="field">
-          <label for="iJabatan">Jabatan</label>
-          <select id="iJabatan">
-            <option value="">Pilih Jabatan</option>
-            <option value="Ketua">Ketua</option>
-            <option value="Anggota">Anggota</option>
-          </select>
-        </div>
+        <div class="field"><label for="iJabatan">Jabatan</label><input type="text" id="iJabatan" /></div>
         <div class="field"><label for="iWakordiv">Wakil Koordinator Divisi</label><input type="text" id="iWakordiv" /></div>
         <div class="field"><label for="iDiv">Divisi</label><input type="text" id="iDiv" /></div>
         <div class="field"><label for="iAmj">Akhir Masa Jabatan</label><input type="text" id="iAmj" placeholder="YYYY-MM-DD atau Tahun" /></div>
@@ -361,6 +367,36 @@
     </div>
   </aside>
 </div>
+
+<!-- Modal Team Credit -->
+<div class="drawer" id="modalCredit" hidden>
+  <div class="drawer__scrim" data-close-credit style="background: rgba(15, 39, 71, 0.7); backdrop-filter: blur(8px);"></div>
+  <aside class="drawer__panel modal-credit-panel" role="dialog" aria-modal="true" aria-labelledby="creditTitle">
+    <button class="btn btn--icon modal-credit-close" data-close-credit aria-label="Tutup">×</button>
+    <div class="credit-content">
+      <div class="credit-photo">
+        <div class="credit-photo-placeholder">👤</div>
+      </div>
+      <h2 id="creditTitle" class="credit-title">Developed by<br>Magang Bawaslu 2026</h2>
+      
+      <div class="credit-names">
+        <div class="credit-name">Nama Anggota 1</div>
+        <div class="credit-name">Nama Anggota 2</div>
+        <div class="credit-name">Nama Anggota 3</div>
+        <div class="credit-name">Nama Anggota 4</div>
+        <div class="credit-name">Nama Anggota 5</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Footer -->
+<footer class="app-footer">
+  <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+    <img src="./assets/image/logo-bawaslu.webp" alt="Logo Bawaslu" width="24" height="24">
+    <button id="btnCredit" class="btn-credit">Developed by Magang Bawaslu 2026</button>
+  </div>
+</footer>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 

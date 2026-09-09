@@ -1,15 +1,6 @@
 [
     {
         "kabkota": "Kabupaten Jeneponto",
-        "nama": "Muhammad Alwi, S.Ag., M.Pd",
-        "jabatan": "Ketua",
-        "kordiv": "SDMO, Diklat dan Datin",
-        "wakordiv": "Hukum, Pencegahan, Partisipasi Masyarakat, dan Hubungan Masyarakat",
-        "penghargaan": "Narasumber Pendidikan Pengawas Partisipatif",
-        "bukti": "assets/awards/jeneponto/muhammad-alwi/SULAWESI SELATAN_Kabupaten Jeneponto_Narasumber_Muhammad Alwi, S.Ag., M.Pd.pdf"
-    },
-    {
-        "kabkota": "Kabupaten Jeneponto",
         "nama": "Eric Fhatur Rahman, A.Md. Kom",
         "jabatan": "Anggota",
         "kordiv": "Hukum, Pencegahan, Partisipasi Masyarakat dan Hubungan Masyarakat",
@@ -164,6 +155,14 @@
         "jabatan": "ANGGOTA",
         "penghargaan": "Narasumber Pendidikan Pengawas Partisipatif Tahun 2026",
         "bukti": "assets/awards/bone/dr-nur-alim/SULAWESI SELATAN_Kabupaten Bone_Narasumber_Dr.Nur Alim,S.H.,M.H.Kes-1.pdf",
+        "kategori": "Narasumber"
+    },
+    {
+        "kabkota": "Jeneponto",
+        "nama": "Muhammad Alwi, S.Ag.,m.Pd",
+        "jabatan": "Ketua",
+        "penghargaan": "Narasumber Pendidikan Pengawas Partisipatif",
+        "bukti": "assets/awards/jeneponto/muhammad-alwi/SULAWESI SELATAN_Kabupaten Jeneponto_Narasumber_Muhammad Alwi, S.Ag., M.Pd.pdf",
         "kategori": "Narasumber"
     }
 ]

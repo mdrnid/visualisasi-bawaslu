@@ -56,3 +56,5 @@ visualisasi-bawaslu-main.rar
 # Batch script logs (generated when running in background mode)
 server.log
 tunnel.log
+
+.agent/
