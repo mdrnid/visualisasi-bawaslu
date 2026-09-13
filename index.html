@@ -37,7 +37,7 @@
       </div>
     </div>
     <div class="appbar__actions">
-  <!-- Removed landing link -->
+  <a class="btn btn--ghost" href="/">← Beranda</a>
   <button class="btn btn--ghost" id="btnRefresh" type="button">
     Muat Ulang Data
   </button>
@@ -369,33 +369,44 @@
 </div>
 
 <!-- Modal Team Credit -->
-<div class="drawer" id="modalCredit" hidden>
-  <div class="drawer__scrim" data-close-credit style="background: rgba(15, 39, 71, 0.7); backdrop-filter: blur(8px);"></div>
-  <aside class="drawer__panel modal-credit-panel" role="dialog" aria-modal="true" aria-labelledby="creditTitle">
-    <button class="btn btn--icon modal-credit-close" data-close-credit aria-label="Tutup">×</button>
-    <div class="credit-content">
-      <div class="credit-photo">
-        <div class="credit-photo-placeholder">👤</div>
+<div class="lp-modal" id="modalCredit" hidden>
+  <div class="lp-modal-backdrop" data-close-credit></div>
+  <div class="lp-modal-card">
+    <button class="lp-modal-close" data-close-credit aria-label="Tutup Modal">✕</button>
+    
+    <!-- Full semi-transparent background photo -->
+    <img src="./assets/image/magang.jpeg" alt="Tim Magang Bawaslu Sulsel 2026" class="lp-modal-bg-img">
+
+    <div class="lp-modal-content">
+      <div class="lp-modal-main-text">
+        <h2 id="creditTitle" class="lp-modal-title">
+          Developed by<br>
+          Magang Bawaslu Sulsel 2026
+        </h2>
       </div>
-      <h2 id="creditTitle" class="credit-title">Developed by<br>Magang Bawaslu 2026</h2>
-      
-      <div class="credit-names">
-        <div class="credit-name">Nama Anggota 1</div>
-        <div class="credit-name">Nama Anggota 2</div>
-        <div class="credit-name">Nama Anggota 3</div>
-        <div class="credit-name">Nama Anggota 4</div>
-        <div class="credit-name">Nama Anggota 5</div>
+
+      <div class="lp-modal-footer-contact">
+        <span class="contact-name-small">Muh. Daryadnan Yurisky Musakkar</span>
+        <span class="contact-dot">&bull;</span>
+        <a href="https://wa.me/6282187671753" target="_blank" rel="noopener" class="contact-phone-plain" title="Hubungi via WhatsApp / Telepon">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+          </svg>
+          <span>082187671753</span>
+        </a>
       </div>
     </div>
-  </aside>
+  </div>
 </div>
 
 <!-- Footer -->
 <footer class="app-footer">
-  <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
-    <img src="./assets/image/logo-bawaslu.webp" alt="Logo Bawaslu" width="24" height="24">
-    <button id="btnCredit" class="btn-credit">Developed by Magang Bawaslu 2026</button>
-  </div>
+  <p style="text-align: center; color: var(--muted); font-size: 13px; margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;">
+    © 2026 Bawaslu Provinsi Sulawesi Selatan &bull; 
+    <button id="btnCredit" class="btn-credit-text" type="button" style="background: none; border: none; padding: 0; font: inherit; color: var(--muted); cursor: pointer; text-decoration: underline;">
+      Developed by Magang Bawaslu Sulsel 2026
+    </button>
+  </p>
 </footer>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>

@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0.."
 title Bawaslu Project - Stopping...
 
 :: Cek apakah ada proses Node.js yang berjalan

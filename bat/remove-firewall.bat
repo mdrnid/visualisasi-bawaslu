@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0.."
 color 0C
 title Bawaslu Project - Remove Firewall Rule
 

@@ -119,7 +119,13 @@ alter table api.personnel enable row level security;
 alter table api.awards    enable row level security;
 
 revoke all on all tables in schema api from anon, authenticated;
-grant usage on schema api to anon;
+grant usage on schema api to anon, authenticated, service_role, postgres;
+grant usage on schema api to authenticator;
+grant all privileges on all tables in schema api to service_role, postgres;
+grant all privileges on all sequences in schema api to service_role, postgres;
+grant all privileges on all routines in schema api to service_role, postgres;
+alter default privileges in schema api grant all on tables to service_role, postgres;
+alter default privileges in schema api grant all on sequences to service_role, postgres;
 
 grant select (id, personnel_code, province, district, name, gender, position, wakordiv, division,
               term_end, office_email, website, photo_object_path, photo_is_public,
@@ -142,12 +148,22 @@ create policy "anon reads published awards" on api.awards
       select 1 from api.personnel p
        where p.id = personnel_id and p.is_published and p.deleted_at is null));
 
--- 9. STORAGE BUCKET public-photos
+-- 9. STORAGE BUCKET public-photos & award-proofs
 insert into storage.buckets (id, name, public)
 values ('public-photos', 'public-photos', true)
+on conflict (id) do update set public = true;
+
+insert into storage.buckets (id, name, public)
+values ('award-proofs', 'award-proofs', true)
 on conflict (id) do update set public = true;
 
 drop policy if exists "Public Read Access for Public Photos" on storage.objects;
 create policy "Public Read Access for Public Photos"
   on storage.objects for select
   using (bucket_id = 'public-photos');
+
+drop policy if exists "Public Read Access for Award Proofs" on storage.objects;
+create policy "Public Read Access for Award Proofs"
+  on storage.objects for select
+  using (bucket_id = 'award-proofs');
+

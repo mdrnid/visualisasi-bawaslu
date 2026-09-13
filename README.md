@@ -37,8 +37,17 @@ node scripts/import-xlsx.mjs --commit
 ### 3. Menjalankan Server
 ```bash
 npm install        # Pasang dependensi
-npm run dev        # Jalankan server lokal di http://127.0.0.1:8080
+npm start          # Jalankan server lokal di http://localhost:8080
 ```
+
+---
+
+## Panduan Instalasi di Device / Komputer Lain
+
+Untuk panduan lengkap langkah-demi-langkah memasang aplikasi ini di komputer/laptop baru, silakan baca:
+👉 **[Panduan Setup Device Lain](docs/PANDUAN_SETUP_DEVICE_LAIN.md)** (mencakup cara install Node.js, clone/copy file, konfigurasi `.env`, setup database Supabase, hingga akses LAN/Wi-Fi kantor).
+
+---
 
 ## Penjaminan Kualitas & Pengujian
 

@@ -134,15 +134,44 @@
   </main>
 
   <footer class="lp-footer">
-    <div class="lp-brand">
-      <img src="./assets/image/logo-bawaslu.webp" alt="Logo Bawaslu" width="40" height="40">
-      <div>
-        <strong>Bawaslu Sulawesi Selatan</strong>
-        <span>Direktori & Dashboard Personel</span>
+    <p class="copyright-text">
+      © 2026 Bawaslu Provinsi Sulawesi Selatan &bull; 
+      <button id="btnCreditLanding" class="btn-credit-text" type="button" title="Klik untuk informasi pengembang & kontak teknis">
+        Developed by Magang Bawaslu Sulsel 2026
+      </button>
+    </p>
+  </footer>
+
+  <!-- Modal Developed By / Tim Magang Bawaslu -->
+  <div class="lp-modal" id="modalCreditLanding" hidden aria-hidden="true">
+    <div class="lp-modal-backdrop" id="closeModalCreditLanding"></div>
+    <div class="lp-modal-card">
+      <button class="lp-modal-close" id="btnCloseModalCreditLanding" aria-label="Tutup Modal">✕</button>
+      
+      <!-- Full semi-transparent background photo -->
+      <img src="./assets/image/magang.jpeg" alt="Tim Magang Bawaslu Sulsel 2026" class="lp-modal-bg-img">
+
+      <div class="lp-modal-content">
+        <div class="lp-modal-main-text">
+          <h2 class="lp-modal-title">
+            Developed by<br>
+            Magang Bawaslu Sulsel 2026
+          </h2>
+        </div>
+
+        <div class="lp-modal-footer-contact">
+          <span class="contact-name-small">Muh. Daryadnan Yurisky Musakkar</span>
+          <span class="contact-dot">&bull;</span>
+          <a href="https://wa.me/6282187671753" target="_blank" rel="noopener" class="contact-phone-plain" title="Hubungi via WhatsApp / Telepon">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+            </svg>
+            <span>082187671753</span>
+          </a>
+        </div>
       </div>
     </div>
-    <p>Developed by Magang Bawaslu 2026</p>
-  </footer>
+  </div>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script type="module" src="./assets/js/landing.js"></script>
 </body>

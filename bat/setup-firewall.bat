@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0.."
 color 0E
 title Bawaslu Project - Firewall Setup
 

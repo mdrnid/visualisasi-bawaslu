@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0.."
 title Bawaslu Project - Starting...
 
 :: Cek apakah node_modules sudah terinstall

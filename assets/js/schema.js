@@ -108,6 +108,7 @@ const slugHeader = (v) =>
 /** Urutan penting: pola paling spesifik didahulukan. */
 const HEADER_RULES = [
     ['id', (n) => n === 'ID' || n === 'IDPERSONEL' || n === 'PERSONELID'],
+    ['version', (n) => n === 'VERSION' || n === 'VER'],
     ['foto', (n) => n === 'FOTO' || n === 'PHOTO' || n.includes('PASFOTO') || n.includes('FOTOPROFIL') || n.includes('URLFOTO')],
     ['provinsi', (n) => n.includes('PROVINSI') || n === 'PROV'],
     ['kabkota', (n) => n.includes('KABKOTA') || n.includes('KABUPATEN') || n.includes('KOTA')],
@@ -226,6 +227,8 @@ export function normUrl(v) {
 /** Ubah satu baris mentah menjadi record bersih yang siap dianalisis. */
 export function normalizeRecord(raw, index, cc = '62') {
     const rec = { _rowNumber: raw.__row ?? index + 2 };
+    if (raw.id) rec.id = String(raw.id).trim();
+    if (raw.version) rec.version = raw.version;
     for (const f of FIELDS) {
         const v = raw[f.key];
         if (isBlank(v)) {
@@ -331,20 +334,16 @@ export function assignStableIds(records) {
     let autoCounter = 1;
     
     for (const rec of records) {
-        // 1. Cek apakah record sudah punya ID dari Excel
+        // 1. Cek apakah record sudah punya ID dari DB / Excel (UUID atau string ID)
         if (rec.id && typeof rec.id === 'string' && rec.id.trim()) {
-            const cleanId = rec.id.trim().toUpperCase();
-            // Validasi format ID (PRS-XXXX atau apapun yang dimulai PRS)
-            if (/^PRS-\d{4,}$/.test(cleanId)) {
-                if (idSeen.has(cleanId)) {
-                    // ID duplikat - generate baru
-                    console.warn(`[schema] ID duplikat: ${cleanId}, generate baru`);
-                } else {
-                    rec.id = cleanId;
-                    rec._id = cleanId; // backward compatibility
-                    idSeen.add(cleanId);
-                    continue;
-                }
+            const cleanId = rec.id.trim();
+            if (!idSeen.has(cleanId)) {
+                rec.id = cleanId;
+                rec._id = cleanId; // backward compatibility
+                idSeen.add(cleanId);
+                continue;
+            } else {
+                console.warn(`[schema] ID duplikat: ${cleanId}, generate baru`);
             }
         }
         
