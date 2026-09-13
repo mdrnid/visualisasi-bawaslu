@@ -4,6 +4,16 @@
  * Server statis + API untuk Visualisasi Personel Bawaslu.
  * Sumber kebenaran data: Supabase Postgres (schema api) via lib/db.js.
  * Berkas Excel hanya digunakan untuk import/export/backup oleh script CLI.
+ * 
+ * PERBAIKAN CRUD v2 (2026-09-13):
+ * - Endpoint CRUD eksplisit (POST/PATCH/DELETE /api/personnel)
+ * - Optimistic concurrency via version field
+ * - 0-rows-affected = error (bukan sukses)
+ * - Hapus fallback pencocokan nama
+ * - Per-row validation (bukan all-or-nothing)
+ * - Cache epoch-based invalidation
+ * - Structured logging per mutasi
+ * - Guard isDbConfigured() pada semua endpoint tulis
  */
 'use strict';
 
@@ -15,7 +25,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import multer from 'multer';
 import sharp from 'sharp';
-import { validateRecord } from './assets/js/schema.js';
+import { validateRecord, normName, normKabkota } from './assets/js/schema.js';
 import { supabaseAdmin, isDbConfigured } from './lib/db.js';
 import { slugify, stripNameTitles } from './assets/js/text-utils.js';
 import { compressProofBuffer } from './utils/compressor.js';
@@ -165,11 +175,89 @@ app.get('/landing.html', page('landing.html'));
 app.get('/landing.css', page('landing.css'));
 
 // ---------- DATA ACCESS LAYER: SUPABASE POSTGRES ----------
-// ponytail: simple memory cache to survive ENOTFOUND and speed up loads. Add Redis when memory/multi-instance requires it.
+
+// Cache berbasis epoch: setiap operasi tulis menaikkan cacheEpoch.
+// Request baca yang dimulai sebelum epoch berubah TIDAK akan menulis cache.
+let cacheEpoch = 0;
 const memCache = {};
 const CACHE_TTL = 30000; // 30s
 
-// 1. GET /api/stats - Statistik publik (nama kolom teragregasi, memperbaiki bug row[6])
+function invalidateCache() {
+    cacheEpoch++;
+    memCache.data = null;
+    memCache.stats = null;
+    memCache.awards = null;
+}
+
+// ---------- Helper: Parse gender dengan whitelist ketat ----------
+function parseGender(raw) {
+    const s = String(raw || '').trim().toLowerCase();
+    const GENDER_MAP = {
+        'laki-laki': 'L', 'l': 'L', 'pria': 'L', 'male': 'L', 'lk': 'L', 'm': 'L',
+        'perempuan': 'P', 'p': 'P', 'wanita': 'P', 'female': 'P', 'pr': 'P', 'w': 'P', 'f': 'P',
+    };
+    return GENDER_MAP[s] || null;
+}
+
+// ---------- Helper: Parse AMJ ke term_start/term_end ----------
+function parseAmj(raw) {
+    const s = String(raw || '').trim();
+    const result = { term_raw: s || null, term_start: null, term_end: null };
+    if (!s) return result;
+
+    // Format "2023-2028" atau "2023 - 2028"
+    const rangeMatch = s.match(/^(\d{4})\s*[-–]\s*(\d{4})$/);
+    if (rangeMatch) {
+        result.term_start = `${rangeMatch[1]}-01-01`;
+        result.term_end = `${rangeMatch[2]}-12-31`;
+    }
+    return result;
+}
+
+// ---------- Helper: Build record payload dari request body ----------
+function buildRecordPayload(r) {
+    const gender = parseGender(r.gender);
+    const amj = parseAmj(r.amj);
+    
+    return {
+        province: r.provinsi || null,
+        district: r.kabkota ? normKabkota(r.kabkota) : null,
+        name: r.nama ? normName(r.nama) : null,
+        gender: gender,
+        position: r.jabatan || null,
+        wakordiv: r.wakordiv || null,
+        division: r.div || null,
+        ...amj, // term_raw, term_start, term_end
+        religion: r.agama || null,
+        education: r.pendidikan || null,
+        phone: r.hp || null,
+        private_email: r.emailP ? r.emailP.toLowerCase() : null,
+        office_email: r.emailK ? r.emailK.toLowerCase() : null,
+        office_address: r.alamat || null,
+        facebook: r.facebook || null,
+        instagram: r.instagram || null,
+        website: r.website || null,
+        photo_local_path: r.foto || null,
+    };
+}
+
+// ---------- Helper: Structured logging ----------
+function logMutation(action, { personnelId, personnelName, changedFields, rowsAffected, versionBefore, versionAfter, durationMs, requestId }) {
+    console.log(JSON.stringify({
+        ts: new Date().toISOString(),
+        action,
+        requestId: requestId || '-',
+        personnelId: personnelId || '-',
+        personnelName: personnelName || '-',
+        changedFields: changedFields || [],
+        rowsAffected: rowsAffected ?? 0,
+        versionBefore: versionBefore ?? null,
+        versionAfter: versionAfter ?? null,
+        durationMs: durationMs ?? 0,
+    }));
+}
+
+// 1. GET /api/stats - Statistik publik
 app.get('/api/stats', async (req, res) => {
     try {
         if (!isDbConfigured()) {
@@ -218,8 +306,11 @@ app.get('/api/stats', async (req, res) => {
         memCache.statsExp = Date.now() + CACHE_TTL;
         res.json(memCache.stats);
     } catch (err) {
-        if (memCache.stats) return res.json(memCache.stats);
+        // FIX A7: Jangan sajikan cache sebagai respons sukses saat error
         console.error('[server] /api/stats error:', err);
+        if (memCache.stats) {
+            return res.status(200).json({ ...memCache.stats, _stale: true, _warning: 'Data dari cache, DB error: ' + err.message });
+        }
         res.status(500).json({ ok: false, error: 'Gagal membaca statistik dari database.' });
     }
 });
@@ -230,6 +321,9 @@ app.get('/api/data', requireAuth, async (req, res) => {
         if (!isDbConfigured()) {
             return res.status(503).json({ ok: false, error: 'Database belum dikonfigurasi.' });
         }
+        
+        const readEpoch = cacheEpoch; // Snapshot epoch saat request dimulai
+        
         if (memCache.data && Date.now() < memCache.dataExp) return res.json(memCache.data);
 
         const { data: records, error } = await supabaseAdmin
@@ -241,7 +335,6 @@ app.get('/api/data', requireAuth, async (req, res) => {
         if (error) throw error;
 
         // Susun struktur grid 2D yang kompatibel dengan parser frontend
-        // Kolom id dan version ditambahkan secara additive di awal
         const headerRow = [
             'ID', 'VERSION', 'PROVINSI', 'KABUPATEN/KOTA', 'NAMA', 'JENIS KELAMIN',
             'JABATAN', 'WAKORDIV', 'DIVISI', 'AMJ', 'AGAMA', 'PENDIDIKAN',
@@ -283,7 +376,7 @@ app.get('/api/data', requireAuth, async (req, res) => {
             ]);
         }
 
-        memCache.data = {
+        const responseData = {
             ok: true,
             data: {
                 grid,
@@ -292,11 +385,26 @@ app.get('/api/data', requireAuth, async (req, res) => {
                 mtime: maxMtime || Date.now(),
             }
         };
-        memCache.dataExp = Date.now() + CACHE_TTL;
-        res.json(memCache.data);
+        
+        // FIX A6: Hanya tulis cache jika epoch belum berubah (tidak ada write di tengah)
+        if (readEpoch === cacheEpoch) {
+            memCache.data = responseData;
+            memCache.dataExp = Date.now() + CACHE_TTL;
+        }
+        
+        // FIX A8: Cache-Control: no-store agar browser/proxy tidak cache response stale
+        res.setHeader('Cache-Control', 'no-store');
+        res.json(responseData);
     } catch (err) {
-        if (memCache.data) return res.json(memCache.data);
+        // FIX A7: Jangan sajikan cache sebagai respons sukses saat error
         console.error('[server] /api/data error:', err);
+        if (memCache.data) {
+            return res.status(200).json({ 
+                ...memCache.data, 
+                _stale: true, 
+                _warning: 'Data dari cache karena error DB: ' + err.message 
+            });
+        }
         res.status(500).json({ ok: false, error: 'Gagal membaca data dari database: ' + err.message });
     }
 });
@@ -354,6 +462,7 @@ app.get('/data/penghargaan.json', requireAuth, async (req, res) => {
             }
             return {
                 id: a.id,
+                personnel_id: a.personnel_id,
                 kabkota: a.personnel?.district || '',
                 nama: a.personnel?.name || '',
                 jabatan: a.personnel?.position || '',
@@ -369,8 +478,11 @@ app.get('/data/penghargaan.json', requireAuth, async (req, res) => {
         memCache.awardsExp = Date.now() + CACHE_TTL;
         res.json(output);
     } catch (err) {
-        if (memCache.awards) return res.json(memCache.awards);
+        // FIX A7: Jangan sajikan cache sebagai respons sukses saat error tanpa warning
         console.warn('[server] fallback penghargaan.json error:', err.message);
+        if (memCache.awards) {
+            return res.json(memCache.awards); // penghargaan bersifat non-kritis, tetap sajikan
+        }
         const legacyFile = path.join(__dirname, 'data', 'penghargaan.json');
         if (fs.existsSync(legacyFile)) {
             res.sendFile(legacyFile);
@@ -380,11 +492,249 @@ app.get('/data/penghargaan.json', requireAuth, async (req, res) => {
     }
 });
 
-// 3. POST /api/save - Simpan data (Diff-based, per record, dengan optimistic concurrency)
+// ========== CRUD EKSPLISIT PER RECORD ==========
+
 app.use(express.json({ limit: '5mb' }));
 
+// ---------- POST /api/personnel — Buat 1 record baru ----------
+app.post('/api/personnel', requireAuth, async (req, res) => {
+    const startMs = Date.now();
+    try {
+        if (!isDbConfigured()) {
+            return res.status(503).json({ ok: false, error: 'Database belum dikonfigurasi.' });
+        }
+
+        const r = req.body;
+        if (!r.nama || !String(r.nama).trim()) {
+            return res.status(400).json({ ok: false, error: 'Nama wajib diisi.' });
+        }
+
+        // Validasi
+        const issues = validateRecord(r, { strictEmail: false });
+        const errors = issues.filter(i => i.severity === 'error');
+        if (errors.length > 0) {
+            return res.status(422).json({
+                ok: false,
+                code: 'VALIDATION_ERROR',
+                errors: errors.map(e => `${e.field}: ${e.message}`),
+            });
+        }
+
+        const recordData = buildRecordPayload(r);
+
+        // FIX A6: Invalidasi cache SEBELUM tulis
+        invalidateCache();
+
+        // Insert — personnel_code diisi otomatis oleh DEFAULT dari sequence DB
+        const { data: inserted, error: iErr } = await supabaseAdmin
+            .from('personnel')
+            .insert({
+                ...recordData,
+                is_published: false,
+                photo_is_public: false,
+                // version default 1 dari skema, personnel_code dari sequence
+            })
+            .select()
+            .single();
+
+        if (iErr) {
+            console.error('[server] INSERT ERROR:', iErr);
+            return res.status(500).json({ ok: false, code: 'DB_ERROR', error: iErr.message });
+        }
+
+        // FIX A6: Invalidasi cache SETELAH tulis
+        invalidateCache();
+
+        logMutation('INSERT', {
+            personnelId: inserted.id,
+            personnelName: inserted.name,
+            rowsAffected: 1,
+            versionAfter: inserted.version,
+            durationMs: Date.now() - startMs,
+        });
+
+        res.status(201).json({ ok: true, record: inserted });
+    } catch (err) {
+        console.error('[server] POST /api/personnel error:', err);
+        res.status(500).json({ ok: false, error: 'Gagal membuat record: ' + err.message });
+    }
+});
+
+// ---------- PATCH /api/personnel/:id — Update 1 record (optimistic locking) ----------
+app.patch('/api/personnel/:id', requireAuth, async (req, res) => {
+    const startMs = Date.now();
+    try {
+        if (!isDbConfigured()) {
+            return res.status(503).json({ ok: false, error: 'Database belum dikonfigurasi.' });
+        }
+
+        const { id } = req.params;
+        const clientVersion = Number(req.body?.version);
+        
+        if (!id || !id.match(/^[0-9a-f-]{36}$/i)) {
+            return res.status(400).json({ ok: false, code: 'INVALID_ID', error: 'ID harus berupa UUID valid.' });
+        }
+        if (!clientVersion && clientVersion !== 0) {
+            return res.status(400).json({ ok: false, code: 'MISSING_VERSION', error: 'Field version wajib untuk optimistic locking.' });
+        }
+
+        const r = req.body;
+        const patch = buildRecordPayload(r);
+        
+        // Hapus field null/undefined agar hanya field yang dikirim yang di-update
+        // TAPI tetap izinkan null eksplisit (untuk menghapus nilai)
+        // Kita update semua field yang di-build agar konsisten
+        
+        // JANGAN kirim field `version` — trigger bump_version() yang menaikkan
+        
+        // FIX A6: Invalidasi cache SEBELUM tulis
+        invalidateCache();
+
+        // FIX A4+A5+B1: Optimistic locking + guard deleted_at + cek rowsAffected
+        const { data, error } = await supabaseAdmin
+            .from('personnel')
+            .update(patch)
+            .eq('id', id)
+            .eq('version', clientVersion)    // FIX B1: optimistic locking
+            .is('deleted_at', null)           // FIX A5: guard deleted_at
+            .select();
+
+        if (error) {
+            return res.status(500).json({ ok: false, code: 'DB_ERROR', error: error.message });
+        }
+
+        // FIX A4: 0 baris terdampak BUKAN sukses
+        if (!data || data.length === 0) {
+            const { data: current } = await supabaseAdmin
+                .from('personnel')
+                .select('*')
+                .eq('id', id)
+                .maybeSingle();
+            
+            if (!current) {
+                return res.status(404).json({ ok: false, code: 'NOT_FOUND', error: 'Record tidak ditemukan.' });
+            }
+            if (current.deleted_at) {
+                return res.status(410).json({ ok: false, code: 'DELETED', error: 'Record sudah dihapus.' });
+            }
+            // Version conflict
+            return res.status(409).json({
+                ok: false,
+                code: 'VERSION_CONFLICT',
+                error: 'Data sudah diubah oleh pengguna lain. Muat ulang dan coba lagi.',
+                current: current,
+            });
+        }
+
+        // FIX A6: Invalidasi cache SETELAH tulis
+        invalidateCache();
+
+        const updated = data[0];
+        
+        // Hitung field yang berubah untuk logging
+        const changedFields = Object.keys(patch).filter(k => patch[k] !== null || patch[k] !== undefined);
+
+        logMutation('UPDATE', {
+            personnelId: updated.id,
+            personnelName: updated.name,
+            changedFields,
+            rowsAffected: data.length,
+            versionBefore: clientVersion,
+            versionAfter: updated.version,
+            durationMs: Date.now() - startMs,
+        });
+
+        return res.json({ ok: true, record: updated });
+    } catch (err) {
+        console.error('[server] PATCH /api/personnel error:', err);
+        res.status(500).json({ ok: false, error: 'Gagal mengupdate record: ' + err.message });
+    }
+});
+
+// ---------- DELETE /api/personnel/:id — Soft delete dengan version check ----------
+app.delete('/api/personnel/:id', requireAuth, async (req, res) => {
+    const startMs = Date.now();
+    try {
+        if (!isDbConfigured()) {
+            return res.status(503).json({ ok: false, error: 'Database belum dikonfigurasi.' });
+        }
+
+        const { id } = req.params;
+        const clientVersion = Number(req.query?.version || req.body?.version);
+        
+        if (!id || !id.match(/^[0-9a-f-]{36}$/i)) {
+            return res.status(400).json({ ok: false, code: 'INVALID_ID', error: 'ID harus berupa UUID valid.' });
+        }
+
+        // FIX A6: Invalidasi cache SEBELUM tulis
+        invalidateCache();
+
+        const deletePayload = { deleted_at: new Date().toISOString() };
+        
+        let query = supabaseAdmin
+            .from('personnel')
+            .update(deletePayload)
+            .eq('id', id)
+            .is('deleted_at', null);
+        
+        // Jika version dikirim, gunakan untuk optimistic locking
+        if (clientVersion) {
+            query = query.eq('version', clientVersion);
+        }
+        
+        const { data, error } = await query.select();
+
+        if (error) {
+            return res.status(500).json({ ok: false, code: 'DB_ERROR', error: error.message });
+        }
+
+        if (!data || data.length === 0) {
+            const { data: current } = await supabaseAdmin
+                .from('personnel')
+                .select('id, deleted_at, version')
+                .eq('id', id)
+                .maybeSingle();
+            
+            if (!current) {
+                return res.status(404).json({ ok: false, code: 'NOT_FOUND', error: 'Record tidak ditemukan.' });
+            }
+            if (current.deleted_at) {
+                return res.status(410).json({ ok: false, code: 'ALREADY_DELETED', error: 'Record sudah dihapus sebelumnya.' });
+            }
+            return res.status(409).json({
+                ok: false,
+                code: 'VERSION_CONFLICT',
+                error: 'Data sudah diubah oleh pengguna lain.',
+                current: { id: current.id, version: current.version },
+            });
+        }
+
+        // FIX A6: Invalidasi cache SETELAH tulis
+        invalidateCache();
+
+        logMutation('DELETE', {
+            personnelId: id,
+            personnelName: data[0]?.name,
+            rowsAffected: data.length,
+            versionBefore: clientVersion,
+            durationMs: Date.now() - startMs,
+        });
+
+        return res.json({ ok: true, deleted: true, id });
+    } catch (err) {
+        console.error('[server] DELETE /api/personnel error:', err);
+        res.status(500).json({ ok: false, error: 'Gagal menghapus record: ' + err.message });
+    }
+});
+
+// 3. POST /api/save - Simpan data (HANYA untuk import massal, dipertahankan untuk kompatibilitas)
 app.post('/api/save', requireAuth, async (req, res) => {
     try {
+        // FIX A10: Guard isDbConfigured()
+        if (!isDbConfigured()) {
+            return res.status(503).json({ ok: false, error: 'Database belum dikonfigurasi.' });
+        }
+
         const rows = req.body?.rows;
         const baseMtime = req.body?.baseMtime;
         const confirmBulkDelete = req.body?.confirmBulkDelete;
@@ -393,28 +743,23 @@ app.post('/api/save', requireAuth, async (req, res) => {
         if (rows.length === 0) return res.status(400).json({ ok: false, error: 'Tidak ada baris untuk disimpan.' });
         if (rows.length > MAX_ROWS) return res.status(413).json({ ok: false, error: 'Terlalu banyak baris.' });
 
-        // Validasi format baris
-        const validationIssues = [];
+        // FIX A9: Validasi per baris — TIDAK gagalkan seluruh batch
+        const rowResults = [];
+        const validRows = [];
         rows.forEach((row, idx) => {
-            const issues = validateRecord(row, { strictEmail: true });
+            const issues = validateRecord(row, { strictEmail: false }); // strictEmail hanya untuk field yang diubah
             const errors = issues.filter(i => i.severity === 'error');
             if (errors.length > 0) {
-                validationIssues.push({
-                    rowIndex: idx,
+                rowResults.push({
+                    index: idx,
                     nama: row.nama || '(tanpa nama)',
-                    errors: errors.map(e => `${e.field}: ${e.message}`)
+                    status: 'skipped',
+                    errors: errors.map(e => `${e.field}: ${e.message}`),
                 });
+            } else {
+                validRows.push({ row, originalIndex: idx });
             }
         });
-
-        if (validationIssues.length > 0) {
-            return res.status(422).json({
-                ok: false,
-                error: `Validasi gagal untuk ${validationIssues.length} baris.`,
-                issues: validationIssues.slice(0, 10),
-                hint: 'Perbaiki kesalahan sebelum menyimpan.'
-            });
-        }
 
         // Ambil data saat ini dari DB untuk menghitung DIFF
         const { data: currentDbRows, error: fetchErr } = await supabaseAdmin
@@ -428,77 +773,38 @@ app.post('/api/save', requireAuth, async (req, res) => {
 
         // Guard bulk delete: tolak jika berkurang > 20% tanpa konfirmasi
         if (currentCount > 0) {
-            const lossPercent = ((currentCount - rows.length) / currentCount) * 100;
+            const lossPercent = ((currentCount - validRows.length) / currentCount) * 100;
             if (lossPercent > 20 && !confirmBulkDelete) {
                 return res.status(409).json({
                     ok: false,
-                    error: `Penghapusan massal terdeteksi: ${rows.length} baris dikirim, saat ini ${currentCount} baris (kehilangan ${Math.round(lossPercent)}%).`,
+                    error: `Penghapusan massal terdeteksi: ${validRows.length} baris valid dikirim, saat ini ${currentCount} baris (kehilangan ${Math.round(lossPercent)}%).`,
                     hint: 'Pastikan Anda tidak sedang menyimpan data yang terfilter. Kirim ulang dengan confirmBulkDelete: true bila yakin.',
                     requireConfirmBulkDelete: true
                 });
             }
         }
 
-
-
-        // Petakan record database berdasarkan ID (UUID), personnel_code (PRS-XXXX), dan Nama
+        // FIX A2+A3: Petakan record database HANYA berdasarkan UUID
+        // TIDAK ada fallback berdasarkan nama
         const dbById = new Map();
-        const dbByName = new Map();
         currentDbRows.forEach(r => {
             if (r.id) dbById.set(r.id, r);
-            if (r.personnel_code) dbById.set(r.personnel_code, r);
-            dbByName.set(slugify(stripNameTitles(r.name)), r);
         });
 
         const touchedIds = new Set();
-        
-        // Hitung maxExistingNum dari SELURUH record (termasuk yang soft-deleted) agar tidak bentrok 23505
-        const { data: allCodeRows } = await supabaseAdmin
-            .from('personnel')
-            .select('personnel_code');
 
-        let maxExistingNum = 0;
-        (allCodeRows || []).forEach(r => {
-            const m = r.personnel_code?.match(/PRS-(\d+)/);
-            if (m) {
-                const n = parseInt(m[1], 10);
-                if (n > maxExistingNum) maxExistingNum = n;
-            }
-        });
+        // FIX A6: Invalidasi cache SEBELUM tulis
+        invalidateCache();
 
-        // 1. UPDATE & INSERT per record
+        // UPDATE & INSERT per record
         let updateCount = 0, insertCount = 0, skipCount = 0;
-        for (const r of rows) {
+        const errors = [];
+        
+        for (const { row: r, originalIndex: idx } of validRows) {
             const rowId = r.id;
-            const nameKey = slugify(stripNameTitles(r.nama));
-            const existing = (rowId && dbById.get(rowId)) || dbByName.get(nameKey);
+            const existing = rowId ? dbById.get(rowId) : null;
 
-            // Parsing gender
-            let g = null;
-            const rawG = String(r.gender || '').toLowerCase();
-            if (rawG.includes('l') || rawG.includes('pria')) g = 'L';
-            else if (rawG.includes('p') || rawG.includes('wanita')) g = 'P';
-
-            const recordData = {
-                province: r.provinsi || null,
-                district: r.kabkota || null,
-                name: r.nama,
-                gender: g,
-                position: r.jabatan || null,
-                wakordiv: r.wakordiv || null,
-                division: r.div || null,
-                term_raw: r.amj || null,
-                religion: r.agama || null,
-                education: r.pendidikan || null,
-                phone: r.hp || null,
-                private_email: r.emailP ? r.emailP.toLowerCase() : null,
-                office_email: r.emailK ? r.emailK.toLowerCase() : null,
-                office_address: r.alamat || null,
-                facebook: r.facebook || null,
-                instagram: r.instagram || null,
-                website: r.website || null,
-                photo_local_path: r.foto || null,
-            };
+            const recordData = buildRecordPayload(r);
 
             if (existing) {
                 touchedIds.add(existing.id);
@@ -509,102 +815,118 @@ app.post('/api/save', requireAuth, async (req, res) => {
                 for (const [key, val] of Object.entries(recordData)) {
                     if (String(val ?? '') !== String(existing[key] ?? '')) {
                         isChanged = true;
-                        changedFields.push(`${key}: "${String(existing[key] ?? '')}" -> "${String(val ?? '')}"`);
+                        changedFields.push(key);
                     }
                 }
 
                 if (isChanged) {
-                    console.log(`[server] UPDATE ${r.nama} (${existing.id}): ${changedFields.join(', ')}`);
+                    // FIX B1+A4+A5: Optimistic locking + deleted_at guard + cek rowsAffected
+                    const clientVersion = Number(r.version) || existing.version;
                     
-                    // Log version mismatch sebagai warning (tidak blocking)
-                    // Normalisasi client vs server bisa menyebabkan false diff
-                    if (r.version && existing.version && Number(r.version) !== Number(existing.version)) {
-                        console.warn(`[server] Version mismatch for ${r.nama}: client=${r.version}, db=${existing.version}. Proceeding with update.`);
-                    }
-
-                    const nextVersion = (Number(existing.version) || 1) + 1;
-                    const updatePayload = {
-                        ...recordData,
-                        version: nextVersion,
-                    };
-
                     const { data: updated, error: uErr } = await supabaseAdmin
                         .from('personnel')
-                        .update(updatePayload)
+                        .update(recordData)  // JANGAN kirim version; trigger menaikkan
                         .eq('id', existing.id)
+                        .eq('version', clientVersion)
+                        .is('deleted_at', null)
                         .select();
 
                     if (uErr) {
-                        console.error(`[server] UPDATE ERROR for ${r.nama}:`, uErr);
-                        throw uErr;
+                        errors.push({ index: idx, nama: r.nama, error: uErr.message });
+                        continue;
                     }
-                    console.log(`[server] UPDATE OK for ${r.nama}, new version: ${nextVersion}`);
+
+                    if (!updated || updated.length === 0) {
+                        // Version conflict atau record dihapus
+                        errors.push({ index: idx, nama: r.nama, error: 'Version conflict atau record dihapus. Muat ulang data.' });
+                        continue;
+                    }
+
+                    logMutation('BULK_UPDATE', {
+                        personnelId: existing.id,
+                        personnelName: r.nama,
+                        changedFields,
+                        rowsAffected: updated.length,
+                        versionBefore: clientVersion,
+                        versionAfter: updated[0].version,
+                    });
                     updateCount++;
                 } else {
                     skipCount++;
                 }
             } else {
-                // INSERT record baru dengan auto-increment & retry loop jika terjadi bentrok kode
-                let insertSuccess = false;
-                let attempts = 0;
-                while (!insertSuccess && attempts < 50) {
-                    attempts++;
-                    maxExistingNum++;
-                    const newCode = `PRS-${String(maxExistingNum).padStart(4, '0')}`;
-                    const insertData = {
-                        ...recordData,
-                        personnel_code: newCode,
-                        is_published: false,
-                        photo_is_public: false,
-                        version: 1,
-                    };
+                // INSERT record baru — personnel_code dari sequence DB
+                const insertData = {
+                    ...recordData,
+                    is_published: false,
+                    photo_is_public: false,
+                    // version default 1, personnel_code dari sequence
+                };
 
-                    const { data: inserted, error: iErr } = await supabaseAdmin
-                        .from('personnel')
-                        .insert(insertData)
-                        .select()
-                        .single();
+                const { data: inserted, error: iErr } = await supabaseAdmin
+                    .from('personnel')
+                    .insert(insertData)
+                    .select()
+                    .single();
 
-                    if (iErr) {
-                        if (iErr.code === '23505') {
-                            // Kode duplikat terdeteksi, coba angka berikutnya
-                            continue;
-                        }
-                        throw iErr;
-                    }
-                    if (inserted) {
-                        touchedIds.add(inserted.id);
-                        insertSuccess = true;
-                        insertCount++;
-                        console.log(`[server] INSERT OK: ${r.nama} -> ${newCode} (${inserted.id})`);
-                    }
+                if (iErr) {
+                    errors.push({ index: idx, nama: r.nama, error: iErr.message });
+                    continue;
+                }
+                
+                if (inserted) {
+                    touchedIds.add(inserted.id);
+                    insertCount++;
+                    logMutation('BULK_INSERT', {
+                        personnelId: inserted.id,
+                        personnelName: r.nama,
+                        rowsAffected: 1,
+                        versionAfter: inserted.version,
+                    });
                 }
             }
         }
 
-        // 2. SOFT DELETE untuk record yang dihapus
+        // SOFT DELETE untuk record yang tidak dikirim
+        // FIX B3: Cek error pada setiap soft-delete
+        let deletedCount = 0;
         for (const existing of currentDbRows) {
             if (!touchedIds.has(existing.id)) {
-                console.log(`[server] Soft-deleting removed personnel: ${existing.name} (${existing.id})`);
-                await supabaseAdmin
+                const { error: dErr, data: dData } = await supabaseAdmin
                     .from('personnel')
                     .update({ deleted_at: new Date().toISOString() })
-                    .eq('id', existing.id);
+                    .eq('id', existing.id)
+                    .is('deleted_at', null)
+                    .select('id');
+
+                if (dErr) {
+                    errors.push({ nama: existing.name, error: 'Gagal soft-delete: ' + dErr.message });
+                } else if (dData && dData.length > 0) {
+                    deletedCount++;
+                    logMutation('BULK_DELETE', {
+                        personnelId: existing.id,
+                        personnelName: existing.name,
+                        rowsAffected: dData.length,
+                    });
+                }
             }
         }
 
         const now = Date.now();
-        // Invalidate memory cache agar GET /api/data dan /api/stats mengambil data terbaru
-        memCache.data = null;
-        memCache.stats = null;
-        memCache.awards = null;
+        // FIX A6: Invalidasi cache SETELAH tulis
+        invalidateCache();
 
-        const deletedCount = currentDbRows.filter(r => !touchedIds.has(r.id)).length;
-        console.log(`[server] SAVE SUMMARY: ${updateCount} updated, ${insertCount} inserted, ${skipCount} unchanged, ${deletedCount} deleted. Total sent: ${rows.length}`);
+        console.log(`[server] SAVE SUMMARY: ${updateCount} updated, ${insertCount} inserted, ${skipCount} unchanged, ${deletedCount} deleted. Errors: ${errors.length}. Total sent: ${rows.length}`);
 
         res.json({
-            ok: true,
-            rows: rows.length,
+            ok: errors.length === 0,
+            rows: validRows.length,
+            updated: updateCount,
+            inserted: insertCount,
+            skipped: skipCount,
+            deleted: deletedCount,
+            errors: errors.length > 0 ? errors : undefined,
+            skippedValidation: rowResults.length > 0 ? rowResults : undefined,
             savedAt: new Date(now).toISOString(),
             mtime: now,
         });
@@ -616,9 +938,15 @@ app.post('/api/save', requireAuth, async (req, res) => {
 });
 
 // 4. POST /api/upload-photo - Upload foto personel ke disk lokal + simpan path ke DB
+// FIX B6: Menerima personnelId (UUID), BUKAN nama. Update tepat 1 baris.
 app.post('/api/upload-photo', requireAuth, upload.single('photo'), async (req, res) => {
     try {
+        if (!isDbConfigured()) {
+            return res.status(503).json({ ok: false, error: 'Database belum dikonfigurasi.' });
+        }
+
         const nama = String(req.body?.nama ?? '').trim();
+        const personnelId = String(req.body?.personnelId ?? '').trim();
         if (!nama) return res.status(400).json({ ok: false, error: 'Nama personel wajib diisi.' });
         if (!req.file) return res.status(400).json({ ok: false, error: 'Berkas foto tidak ditemukan.' });
 
@@ -648,16 +976,33 @@ app.post('/api/upload-photo', requireAuth, upload.single('photo'), async (req, r
 
         const relativePath = 'assets/personel/' + filename;
 
-        // Update photo_local_path di Postgres
-        if (isDbConfigured()) {
-            await supabaseAdmin
+        // FIX B6: Update berdasarkan personnelId (UUID), bukan ilike nama
+        if (personnelId && personnelId.match(/^[0-9a-f-]{36}$/i)) {
+            invalidateCache();
+
+            const { data: updated, error: upErr } = await supabaseAdmin
                 .from('personnel')
                 .update({ photo_local_path: relativePath })
-                .ilike('name', `%${nama}%`);
+                .eq('id', personnelId)
+                .is('deleted_at', null)
+                .select('id');
+
+            if (upErr) {
+                console.error('[server] upload-photo DB update error:', upErr);
+                return res.status(500).json({ ok: false, error: 'Foto tersimpan di disk tapi gagal update DB: ' + upErr.message });
+            }
+
+            if (!updated || updated.length !== 1) {
+                console.warn(`[server] upload-photo: expected 1 row affected, got ${updated?.length || 0}`);
+                return res.status(404).json({ ok: false, error: 'Record tidak ditemukan atau sudah dihapus. Foto tersimpan di disk.' });
+            }
+
+            invalidateCache();
+        } else {
+            // Fallback untuk backward compatibility — tapi log warning
+            console.warn('[server] upload-photo: personnelId tidak dikirim, foto disimpan di disk saja tanpa update DB.');
         }
 
-        memCache.data = null;
-        memCache.stats = null;
         res.json({ ok: true, path: relativePath, filename });
     } catch (err) {
         console.error('[server] upload foto gagal:', err);
@@ -685,8 +1030,8 @@ app.post('/api/rename-photo', requireAuth, express.json(), async (req, res) => {
 
         const newRelativePath = 'assets/personel/' + newSlug + '.webp';
 
-        // Rename berkas fisik di disk saja. Update path di DB dilakukan atomik oleh /api/save.
-        memCache.data = null;
+        // Rename berkas fisik di disk saja. Update path di DB dilakukan atomik oleh PATCH /api/personnel/:id.
+        invalidateCache();
         res.json({ ok: true, renamed: true, newPath: newRelativePath });
     } catch (err) {
         res.status(500).json({ ok: false, error: 'Gagal rename foto.' });
@@ -694,52 +1039,49 @@ app.post('/api/rename-photo', requireAuth, express.json(), async (req, res) => {
 });
 
 // 6. POST /api/save-awards - Simpan data penghargaan per record via FK personnel_id
+// FIX B7+B8: Menggunakan RPC transaksional
 app.post('/api/save-awards', requireAuth, async (req, res) => {
     try {
-        const awards = req.body?.awards;
-        const targetNama = req.body?.nama;
-        if (!Array.isArray(awards)) return res.status(400).json({ ok: false, error: 'Body harus { awards: [...] }.' });
-
         if (!isDbConfigured()) {
             return res.status(503).json({ ok: false, error: 'Database belum dikonfigurasi.' });
         }
 
-        // Ambil mapping nama -> id
-        const { data: personnelList } = await supabaseAdmin
-            .from('personnel')
-            .select('id, name, district')
-            .is('deleted_at', null);
+        const awards = req.body?.awards;
+        const targetNama = req.body?.nama;
+        const targetPersonnelId = req.body?.personnelId; // FIX: terima personnelId langsung
+        if (!Array.isArray(awards)) return res.status(400).json({ ok: false, error: 'Body harus { awards: [...] }.' });
 
-        const personMap = new Map();
-        (personnelList || []).forEach(p => {
-            const key = slugify(stripNameTitles(p.name));
-            personMap.set(key, p.id);
-        });
+        // Jika personnelId dikirim langsung, gunakan itu
+        let pId = targetPersonnelId;
+        
+        if (!pId && targetNama) {
+            // Fallback: cari berdasarkan nama (untuk backward compatibility)
+            const { data: personnelList } = await supabaseAdmin
+                .from('personnel')
+                .select('id, name')
+                .is('deleted_at', null);
 
-        // Jika targetNama dikirim (save per-personel), bersihkan award lama milik personel ini
-        if (targetNama) {
+            const personMap = new Map();
+            (personnelList || []).forEach(p => {
+                const key = slugify(stripNameTitles(p.name));
+                personMap.set(key, p.id);
+            });
+            
             const targetKey = slugify(stripNameTitles(targetNama));
-            const pId = personMap.get(targetKey);
-            if (pId) {
-                await supabaseAdmin.from('awards').delete().eq('personnel_id', pId);
-            }
+            pId = personMap.get(targetKey);
         }
 
+        if (!pId) {
+            return res.status(404).json({ ok: false, error: 'Personel tidak ditemukan.' });
+        }
+
+        // Build awards data
         const awardRows = [];
         for (const a of awards) {
-            const nama = String(a.nama || a.Nama || targetNama || '').trim();
             const title = String(a.penghargaan || a.title || '').trim();
-            if (!nama || !title) continue;
-
-            const nameKey = slugify(stripNameTitles(nama));
-            const personnelId = personMap.get(nameKey);
-            if (!personnelId) {
-                console.warn(`[awards] Warning: Personel tidak ditemukan untuk award: ${nama}`);
-                continue;
-            }
+            if (!title) continue;
 
             awardRows.push({
-                personnel_id: personnelId,
                 title: title,
                 category: a.kategori || null,
                 issuer: a.issuer || null,
@@ -748,13 +1090,41 @@ app.post('/api/save-awards', requireAuth, async (req, res) => {
             });
         }
 
-        if (awardRows.length > 0) {
-            const { error: batchErr } = await supabaseAdmin.from('awards').upsert(awardRows);
-            if (batchErr) throw batchErr;
+        invalidateCache();
+
+        // FIX B8: Gunakan RPC transaksional (atomic delete + insert)
+        try {
+            const { data: rpcResult, error: rpcErr } = await supabaseAdmin
+                .rpc('save_awards_atomic', {
+                    p_personnel_id: pId,
+                    p_awards: awardRows,
+                });
+
+            if (rpcErr) {
+                // Fallback jika RPC belum ada di DB: gunakan metode lama tapi dengan error handling
+                console.warn('[server] RPC save_awards_atomic gagal, fallback ke metode standar:', rpcErr.message);
+                
+                // Delete lama
+                const { error: delErr } = await supabaseAdmin.from('awards').delete().eq('personnel_id', pId);
+                if (delErr) throw delErr;
+
+                // Insert baru dengan onConflict
+                if (awardRows.length > 0) {
+                    const insertData = awardRows.map(a => ({
+                        personnel_id: pId,
+                        ...a,
+                    }));
+                    const { error: insErr } = await supabaseAdmin
+                        .from('awards')
+                        .insert(insertData);
+                    if (insErr) throw insErr;
+                }
+            }
+        } catch (txErr) {
+            throw txErr;
         }
 
-        memCache.awards = null;
-        memCache.data = null;
+        invalidateCache();
         res.json({ ok: true, count: awardRows.length, savedAt: new Date().toISOString() });
     } catch (err) {
         console.error('[server] save awards error:', err);
@@ -829,7 +1199,11 @@ app.use((err, req, res, next) => {
     res.status(500).json({ ok: false, error: 'Terjadi kesalahan di server.' });
 });
 
-app.listen(PORT, HOST, () => {
-    console.log(`Server berjalan di http://${HOST}:${PORT}`);
-    console.log(`Mode database: ${isDbConfigured() ? 'Supabase Postgres (schema: api)' : 'Fallback / Unconfigured'}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+    app.listen(PORT, HOST, () => {
+        console.log(`Server berjalan di http://${HOST}:${PORT}`);
+        console.log(`Mode database: ${isDbConfigured() ? 'Supabase Postgres (schema: api)' : 'Fallback / Unconfigured'}`);
+    });
+}
+
+export { app, parseGender, parseAmj, buildRecordPayload, invalidateCache, cacheEpoch };

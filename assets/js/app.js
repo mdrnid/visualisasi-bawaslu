@@ -1,13 +1,13 @@
 /** Komposisi aplikasi: state, filter, sinkronisasi URL, dan orkestrasi render. */
 import { APP_CONFIG } from './config.js';
-import { VISIBLE_FIELDS } from './schema.js';
+import { VISIBLE_FIELDS, normKabkota } from './schema.js';
 import { loadDataset, clearDatasetCache } from './data-service.js';
 import * as A from './analytics.js';
 import * as C from './charts.js';
 import * as UI from './ui.js';
 import { esc } from './text-utils.js';
 import { avatarMarkup, hydrateAvatars, clearPhotoCache } from './photos.js';
-import { attachAwards, clearAwardsCache, loadAwards, nameKey, regionKey } from './awards.js';
+import { attachAwards, clearAwardsCache, loadAwards, nameKey, regionKey, awardCategory } from './awards.js';
 import { loadCropper } from './cropper-loader.js';
 
 const { $, $$ } = UI;
@@ -829,6 +829,7 @@ let pendingCroppedFile = null;
 let cropperInstance = null;
 let currentPersonId = null;
 let currentPersonName = '';
+let awardsModified = false;
 
 /** Update photo preview di modal form */
 function updatePhotoPreview() {
@@ -930,6 +931,32 @@ function renderAwardsForm() {
         `).join('');
 }
 
+function setSelectSafely(selectEl, val) {
+    if (!selectEl) return;
+    const v = val != null ? String(val).trim() : '';
+    if (!v) {
+        selectEl.value = '';
+        return;
+    }
+    // Cek kecocokan case-insensitive baik terhadap option.value maupun option textContent
+    let matched = false;
+    for (const opt of selectEl.options) {
+        if (opt.value.toLowerCase() === v.toLowerCase() || opt.textContent.trim().toLowerCase() === v.toLowerCase()) {
+            selectEl.value = opt.value;
+            matched = true;
+            break;
+        }
+    }
+    if (!matched) {
+        // Buat opsi fallback agar browser TIDAK me-reset value ke kosong ("")
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        selectEl.appendChild(opt);
+        selectEl.value = v;
+    }
+}
+
 function openModal(id = null) {
     const form = $('#dataForm');
     if (!form) return;
@@ -968,6 +995,7 @@ function openModal(id = null) {
     currentAwardsList = [];
     currentPersonId = id;
     currentPersonName = '';
+    awardsModified = false;
 
     if (id) {
         const rec = state.all.find((r) => r._id === id || r.id === id || r._key === id);
@@ -978,11 +1006,11 @@ function openModal(id = null) {
             const targetId = rec.id || rec._id || id;
             $('#formRowId').value = targetId;
             $('#iNama').value = rec.nama || '';
-            $('#iProvinsi').value = rec.provinsi || '';
-            $('#iKabkota').value = rec.kabkota || '';
-            $('#iGender').value = rec.gender || '';
-            $('#iAgama').value = rec.agama || '';
-            $('#iPendidikan').value = rec.pendidikan || '';
+            setSelectSafely($('#iProvinsi'), rec.provinsi || 'Sulawesi Selatan');
+            setSelectSafely($('#iKabkota'), normKabkota(rec.kabkota || ''));
+            setSelectSafely($('#iGender'), rec.gender || '');
+            setSelectSafely($('#iAgama'), rec.agama || '');
+            setSelectSafely($('#iPendidikan'), rec.pendidikan || '');
             $('#iJabatan').value = rec.jabatan || '';
             $('#iWakordiv').value = rec.wakordiv || '';
             $('#iDiv').value = rec.div || '';
@@ -1069,18 +1097,19 @@ function closeModal() {
     pendingCroppedFile = null;
 }
 
-async function handlePhotoUpload(nama) {
+async function handlePhotoUpload(nama, personnelId) {
     if (!pendingPhotoFile) return ''; // Tidak ada foto baru
     
     const formData = new FormData();
     formData.append('photo', pendingPhotoFile);
     formData.append('nama', nama);
+    // FIX C8+B6: Kirim personnelId agar server update tepat 1 baris
+    if (personnelId) formData.append('personnelId', personnelId);
     
     try {
         const res = await fetch('/api/upload-photo', { method: 'POST', body: formData });
         const data = await res.json();
         if (data.ok) {
-            // Clear photo cache setelah upload berhasil
             clearPhotoCache();
             return data.path;
         }
@@ -1094,27 +1123,49 @@ async function handlePhotoUpload(nama) {
 }
 
 async function handlePhotoRename(oldName, newName) {
-    if (!oldName || !newName || oldName === newName) return;
+    if (!oldName || !newName || oldName === newName) return null;
     try {
-        await fetch('/api/rename-photo', {
+        const res = await fetch('/api/rename-photo', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ oldName, newName })
         });
+        const data = await res.json();
+        if (data.ok && data.renamed && data.newPath) {
+            return data.newPath;
+        }
     } catch (e) {
         console.error('Gagal rename foto', e);
     }
+    return null;
 }
 
-async function saveAwardsList(kabkota, nama, jabatan) {
+function syncAwardsFromDOM() {
+    const cards = $$('#awardsContainer .award-card');
+    for (const card of cards) {
+        const idx = parseInt(card.dataset.index, 10);
+        if (isNaN(idx) || !currentAwardsList[idx]) continue;
+        const nameInput = card.querySelector('.aw-name');
+        const fileInput = card.querySelector('.aw-file');
+        if (nameInput && nameInput.value.trim()) {
+            currentAwardsList[idx].penghargaan = nameInput.value.trim();
+            awardsModified = true;
+        }
+        if (fileInput && fileInput.files && fileInput.files.length > 0) {
+            currentAwardsList[idx]._pendingFile = fileInput.files[0];
+            awardsModified = true;
+        }
+    }
+}
+
+async function saveAwardsList(kabkota, nama, jabatan, personnelId) {
+    syncAwardsFromDOM();
     const newAwards = [];
     
-    // Process dari currentAwardsList (bukan dari DOM)
     for (let i = 0; i < currentAwardsList.length; i++) {
         const award = currentAwardsList[i];
         let bukti = award.bukti || '';
         
-        // Upload file jika ada pending file
         if (award._pendingFile) {
             const formData = new FormData();
             formData.append('proof', award._pendingFile);
@@ -1123,21 +1174,25 @@ async function saveAwardsList(kabkota, nama, jabatan) {
             try {
                 const res = await fetch('/api/upload-proof', { method: 'POST', body: formData });
                 const data = await res.json();
-                if (data.ok) bukti = data.path;
+                if (data.ok) {
+                    bukti = data.path;
+                    award.bukti = data.path;
+                }
             } catch (e) {
                 console.error('Gagal upload bukti', e);
                 UI.toast('Gagal upload bukti penghargaan ' + (i + 1), 'warn');
             }
         }
 
-        if (award.penghargaan && award.penghargaan.trim()) {
+        const title = (award.penghargaan || '').trim();
+        if (title) {
             newAwards.push({
                 kabkota: kabkota,
                 nama: nama,
                 jabatan: jabatan,
-                penghargaan: award.penghargaan.trim(),
+                penghargaan: title,
                 bukti: bukti,
-                kategori: award.kategori || ''
+                kategori: award.kategori || awardCategory(title)
             });
         }
     }
@@ -1146,7 +1201,7 @@ async function saveAwardsList(kabkota, nama, jabatan) {
         const response = await fetch('/api/save-awards', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nama, kabkota, awards: newAwards })
+            body: JSON.stringify({ nama, kabkota, personnelId, awards: newAwards })
         });
         
         if (!response.ok) {
@@ -1161,22 +1216,29 @@ async function saveAwardsList(kabkota, nama, jabatan) {
 }
 
 async function saveData() {
-    UI.showState('loading', 'Menyimpan data...');
+    syncAwardsFromDOM();
     const id = $('#formRowId').value;
     const newNama = $('#iNama').value;
-    const newKabkota = $('#iKabkota').value;
+    const newKabkota = normKabkota($('#iKabkota').value);
     
     const existingRec = id ? state.all.find((r) => r._id === id || r.id === id) : null;
+    const isNew = !existingRec || existingRec._isNew;
 
-    // Handle rename & upload foto
-    if (id && currentPersonName && currentPersonName !== newNama) {
-        await handlePhotoRename(currentPersonName, newNama);
+    const actionTitle = isNew ? 'Menambahkan Data' : 'Mengedit Data';
+    const actionDesc = isNew ? 'Menyimpan data personel baru ke server...' : 'Menyimpan perubahan data personel ke server...';
+
+    // Tampilkan pop up modal animasi loading
+    UI.showLoadingModal(actionTitle, actionDesc);
+    UI.showState('loading', isNew ? 'Menambahkan data...' : 'Menyimpan perubahan...');
+
+    const submitBtn = $('#dataForm button[type="submit"]');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.dataset.origText = submitBtn.textContent;
+        submitBtn.textContent = isNew ? 'Menambahkan...' : 'Menyimpan...';
     }
 
-    const uploadedFotoPath = await handlePhotoUpload(newNama);
-    // Jika tidak ada upload foto baru saat edit, pertahankan foto lama dari existingRec
-    const finalFotoPath = uploadedFotoPath || (existingRec ? (existingRec.foto || '') : '');
-    
+    // Build data payload
     const newData = {
         nama: newNama,
         provinsi: $('#iProvinsi').value,
@@ -1195,67 +1257,161 @@ async function saveData() {
         facebook: $('#iFacebook').value,
         instagram: $('#iInstagram').value,
         website: $('#iWebsite').value,
-        foto: finalFotoPath,
-        _search: [newNama, $('#iJabatan').value, $('#iProvinsi').value, newKabkota].join(' ').toLowerCase()
     };
 
-    if (id && existingRec) {
-        const index = state.all.findIndex((r) => r._id === id || r.id === id);
-        if (index !== -1) {
-            state.all[index] = { ...state.all[index], ...newData, foto: finalFotoPath };
-        }
-    } else {
-        const newId = 'row-new-' + Date.now();
-        const newRecord = { 
-            id: newId,
-            _id: newId, 
-            _rowNumber: state.all.length ? Math.max(...state.all.map((r) => r._rowNumber)) + 1 : 1,
-            _completeness: 80,
-            ...newData,
-            foto: finalFotoPath
-        };
-        state.all.unshift(newRecord);
-    }
+    try {
+        let savedRecord;
 
-    // 1. Sync data personel ke server terlebih dahulu
-    const saved = await syncToServer();
-    if (!saved) {
-        // syncToServer sudah tampilkan error/konflik, jangan tutup modal
+        if (isNew) {
+            // === CREATE: POST /api/personnel ===
+            const response = await fetch('/api/personnel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newData)
+            });
+            const resData = await response.json();
+
+            if (!response.ok) {
+                UI.hideLoadingModal();
+                UI.showState('hidden');
+                UI.toast('Gagal membuat record: ' + (resData.error || 'Unknown error'), 'error');
+                if (resData.errors) alert('Validasi gagal:\n' + resData.errors.join('\n'));
+                return;
+            }
+            savedRecord = resData.record;
+        } else {
+            // === UPDATE: PATCH /api/personnel/:id ===
+            const personnelId = existingRec.id;
+            const clientVersion = existingRec.version;
+
+            // Handle rename & upload foto
+            let renamedFotoPath = null;
+            if (currentPersonName && currentPersonName !== newNama) {
+                renamedFotoPath = await handlePhotoRename(currentPersonName, newNama);
+            }
+
+            // Upload foto jika ada pending
+            const uploadedFotoPath = await handlePhotoUpload(newNama, personnelId);
+            if (uploadedFotoPath) {
+                newData.foto = uploadedFotoPath;
+            } else if (renamedFotoPath) {
+                newData.foto = renamedFotoPath;
+            } else {
+                // Pertahankan foto lama
+                newData.foto = existingRec.foto || '';
+            }
+
+            const response = await fetch('/api/personnel/' + personnelId, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...newData, version: clientVersion })
+            });
+            const resData = await response.json();
+
+            if (response.status === 409) {
+                // FIX: VERSION_CONFLICT — tampilkan dialog
+                UI.hideLoadingModal();
+                UI.showState('hidden');
+                const current = resData.current;
+                const msg = 'Data sudah diubah oleh pengguna lain.\n\n' +
+                    'Versi server: ' + (current?.version || '?') + '\n' +
+                    'Versi lokal: ' + clientVersion + '\n\n' +
+                    'Pilih:\n' +
+                    '• OK = Muat ulang data terbaru (perubahan Anda hilang)\n' +
+                    '• Cancel = Kembali edit (timpa manual nanti)';
+                if (window.confirm(msg)) {
+                    await reload({ force: true });
+                }
+                return;
+            }
+
+            if (response.status === 404) {
+                UI.hideLoadingModal();
+                UI.showState('hidden');
+                UI.toast('Record tidak ditemukan. Mungkin sudah dihapus.', 'error');
+                await reload({ force: true });
+                return;
+            }
+
+            if (response.status === 410) {
+                UI.hideLoadingModal();
+                UI.showState('hidden');
+                UI.toast('Record sudah dihapus sebelumnya.', 'error');
+                await reload({ force: true });
+                return;
+            }
+
+            if (!response.ok) {
+                UI.hideLoadingModal();
+                UI.showState('hidden');
+                UI.toast('Gagal mengupdate: ' + (resData.error || 'Unknown error'), 'error');
+                return;
+            }
+            savedRecord = resData.record;
+        }
+
+        // === Jika baru dibuat, upload foto setelah record ada di DB ===
+        if (isNew && savedRecord && (pendingPhotoFile || pendingCroppedFile)) {
+            const uploadedFotoPath = await handlePhotoUpload(newNama, savedRecord.id);
+            if (uploadedFotoPath) {
+                // Update foto di DB via PATCH
+                await fetch('/api/personnel/' + savedRecord.id, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ foto: uploadedFotoPath, version: savedRecord.version, nama: newNama })
+                });
+            }
+        }
+
+        // Simpan penghargaan hanya jika user secara eksplisit memodifikasi penghargaan
+        if (awardsModified || (isNew && currentAwardsList.length > 0)) {
+            await saveAwardsList(newKabkota, newNama, $('#iJabatan').value, savedRecord?.id);
+        }
+
+        closeModal();
+        clearPhotoCache();
+        await reload({ force: true });
+
+        // Refresh drawer jika sedang dibuka
+        const searchId = savedRecord?.id || id;
+        if (searchId) {
+            const updatedRec = state.all.find((r) => r.id === searchId || r._id === searchId || (r.nama && r.nama.toLowerCase() === newNama.toLowerCase()));
+            if (updatedRec) {
+                UI.openDrawer(updatedRec);
+            }
+        }
+        UI.hideLoadingModal();
         UI.showState('hidden');
-        return;
-    }
-    
-    // 2. Simpan penghargaan setelah personel pasti tersimpan di database
-    await saveAwardsList(newKabkota, newNama, $('#iJabatan').value);
-
-    closeModal();
-    // Clear photo cache dan reload data terbaru dari server
-    clearPhotoCache();
-    await reload({ force: true });
-    
-    // Refresh drawer jika sedang dibuka agar tampilan otomatis terbarui
-    const searchId = id || newNama;
-    if (searchId) {
-        const updatedRec = state.all.find((r) => r.id === searchId || r._id === searchId || (r.nama && r.nama.toLowerCase() === newNama.toLowerCase()));
-        if (updatedRec) {
-            UI.openDrawer(updatedRec);
+        UI.toast(isNew ? 'Data personel berhasil ditambahkan.' : 'Data personel berhasil diperbarui.', 'success');
+    } catch (e) {
+        console.error('[saveData] error:', e);
+        UI.hideLoadingModal();
+        UI.showState('hidden');
+        UI.toast('Kesalahan saat menyimpan: ' + e.message, 'error');
+    } finally {
+        UI.hideLoadingModal();
+        UI.showState('hidden');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            if (submitBtn.dataset.origText) {
+                submitBtn.textContent = submitBtn.dataset.origText;
+            }
         }
     }
-    UI.toast('Data berhasil disimpan.', 'success');
 }
 
+/** syncToServer: dipertahankan hanya untuk delete massal via POST /api/save (kompatibilitas). */
 async function syncToServer({ confirmBulkDelete = false } = {}) {
     try {
         const rows = state.all.map((r) => {
             const obj = {};
-            // SERTAKAN ID DAN VERSION AGAR SERVER DAPAT MEMADANKAN REKORD DATABASE DENGAN PRESISI
-            if (r.id) obj.id = r.id;
+            // Hanya kirim UUID asli, BUKAN _localId
+            if (r.id && !r._isNew) obj.id = r.id;
             if (r.version) obj.version = r.version;
 
             VISIBLE_FIELDS.forEach((f) => {
                 obj[f.key] = r[f.key] ?? '';
             });
-            // Manual assign hidden fields
             obj['foto'] = r.foto ?? '';
             return obj;
         });
@@ -1268,7 +1424,6 @@ async function syncToServer({ confirmBulkDelete = false } = {}) {
         const resData = await response.json();
         
         if (response.status === 409) {
-            // Conflict: data sudah berubah atau bulk delete warning
             if (resData.requireConfirmBulkDelete) {
                 const confirmed = window.confirm(
                     resData.error + '\n\n' + 
@@ -1276,12 +1431,10 @@ async function syncToServer({ confirmBulkDelete = false } = {}) {
                     '\n\nKlik OK untuk paksa simpan.'
                 );
                 if (confirmed) {
-                    // Retry dengan confirmBulkDelete
                     return await syncToServer({ confirmBulkDelete: true });
                 }
                 return false;
             } else {
-                // Concurrency conflict
                 const shouldReload = window.confirm(
                     resData.error + '\n\n' + 
                     (resData.hint || 'Muat ulang data dulu, lalu ulangi perubahan Anda.') + 
@@ -1296,17 +1449,15 @@ async function syncToServer({ confirmBulkDelete = false } = {}) {
         
         if (!response.ok) {
             let errorMsg = resData.error || 'Unknown error';
-            if (resData.issues && Array.isArray(resData.issues)) {
-                const details = resData.issues.map(i => `${i.nama}: ${i.errors.join(', ')}`).join('\n');
-                errorMsg += '\n' + details;
+            if (resData.errors && Array.isArray(resData.errors)) {
+                errorMsg += '\n' + resData.errors.map(e => `${e.nama}: ${e.error}`).join('\n');
             }
             console.error('[syncToServer] Save failed:', resData);
             UI.toast('Gagal menyimpan ke database: ' + (resData.error || 'Unknown error'), 'error');
-            alert('Gagal menyimpan data ke database:\n\n' + errorMsg + (resData.hint ? '\n\nPetunjuk: ' + resData.hint : ''));
+            alert('Gagal menyimpan data ke database:\n\n' + errorMsg);
             return false;
         }
         
-        // Update mtime setelah berhasil simpan
         if (resData.mtime) {
             state.mtime = resData.mtime;
         }
@@ -1470,8 +1621,9 @@ function bindEvents() {
             }
             
             currentAwardsList[idx]._editing = false;
+            awardsModified = true;
             renderAwardsForm();
-            UI.toast('Perubahan disimpan (akan diupload saat save form)', 'success');
+            UI.toast('Perubahan disimpan', 'success');
             return;
         }
         
@@ -1483,13 +1635,42 @@ function bindEvents() {
             if (!confirm('Yakin ingin menghapus penghargaan ini?')) return;
             
             currentAwardsList.splice(idx, 1);
+            awardsModified = true;
             renderAwardsForm();
             UI.toast('Penghargaan dihapus', 'success');
             return;
         }
     });
+
+    // Real-time sync untuk input nama & file bukti di dalam awardsContainer
+    $('#awardsContainer')?.addEventListener('input', (e) => {
+        if (e.target.classList.contains('aw-name')) {
+            const card = e.target.closest('.award-card');
+            if (!card) return;
+            const idx = parseInt(card.dataset.index, 10);
+            if (!isNaN(idx) && currentAwardsList[idx]) {
+                currentAwardsList[idx].penghargaan = e.target.value.trim();
+                awardsModified = true;
+                const titleEl = card.querySelector('.award-card__title');
+                if (titleEl) titleEl.textContent = e.target.value.trim() || 'Belum diisi';
+            }
+        }
+    });
+
+    $('#awardsContainer')?.addEventListener('change', (e) => {
+        if (e.target.classList.contains('aw-file') && e.target.files && e.target.files.length > 0) {
+            const card = e.target.closest('.award-card');
+            if (!card) return;
+            const idx = parseInt(card.dataset.index, 10);
+            if (!isNaN(idx) && currentAwardsList[idx]) {
+                currentAwardsList[idx]._pendingFile = e.target.files[0];
+                awardsModified = true;
+            }
+        }
+    });
     
     $('#btnAddAward')?.addEventListener('click', () => {
+        awardsModified = true;
         currentAwardsList.push({ 
             penghargaan: '', 
             bukti: '', 
@@ -1705,25 +1886,54 @@ function bindEvents() {
         const confirmMsg = `Hapus ${toDelete.length} personel?\n\n${names}${suffix}\n\nTindakan ini akan menghapus data dari database.`;
         
         if (window.confirm(confirmMsg)) {
-            setRecords(updated);
-            state.table.page = 0;
-            
             $('#grid').classList.remove('delete-mode');
             $('#btnAddData').hidden = false;
             $('#btnDeleteMode').hidden = false;
             $('#btnCancelDelete').hidden = true;
             $('#btnConfirmDelete').hidden = true;
 
-            render();
+            UI.showLoadingModal('Menghapus Data', `Menghapus ${toDelete.length} personel dari database...`);
             UI.showState('loading', 'Menghapus data...');
-            syncToServer().then(async (success) => {
-                if (success) {
+            
+            (async () => {
+                try {
+                    let deletedCount = 0;
+                    const errors = [];
+
+                    for (const rec of toDelete) {
+                        if (rec.id && !rec._isNew) {
+                            const versionParam = rec.version ? `?version=${encodeURIComponent(rec.version)}` : '';
+                            const res = await fetch(`/api/personnel/${encodeURIComponent(rec.id)}${versionParam}`, {
+                                method: 'DELETE',
+                            });
+                            const resData = await res.json().catch(() => ({}));
+                            if (!res.ok) {
+                                errors.push(`${rec.nama || rec.id}: ${resData.error || 'Gagal menghapus'}`);
+                            } else {
+                                deletedCount++;
+                            }
+                        } else {
+                            // Record lokal yang belum tersimpan di server
+                            deletedCount++;
+                        }
+                    }
+
                     await reload({ force: true });
-                    UI.toast(`Berhasil menghapus ${toDelete.length} personel.`, 'success');
-                } else {
+
+                    if (errors.length > 0) {
+                        UI.toast(`Berhasil menghapus ${deletedCount}, gagal: ${errors.length}`, 'warn');
+                        alert('Beberapa data gagal dihapus:\n' + errors.join('\n'));
+                    } else {
+                        UI.toast(`Berhasil menghapus ${deletedCount} personel.`, 'success');
+                    }
+                } catch (err) {
+                    console.error('Delete error:', err);
+                    UI.toast('Kesalahan saat menghapus data: ' + err.message, 'error');
+                } finally {
+                    UI.hideLoadingModal();
                     UI.showState('hidden');
                 }
-            });
+            })();
         }
     });
 

@@ -56,6 +56,24 @@ export function showState(kind, title, detail = '') {
               (detail ? '<p>' + esc(detail) + '</p>' : '');
 }
 
+/** Menampilkan pop-up dialog loading animasi untuk operasi CRUD (Tambah, Edit, Hapus). */
+export function showLoadingModal(title = 'Memproses Data...', desc = 'Mohon tunggu sebentar...') {
+    const modal = $('#crudLoadingModal');
+    if (!modal) return;
+    const tEl = $('#crudLoadingTitle');
+    const dEl = $('#crudLoadingDesc');
+    if (tEl) tEl.textContent = title;
+    if (dEl) dEl.textContent = desc;
+    modal.hidden = false;
+}
+
+/** Menyembunyikan pop-up dialog loading CRUD. */
+export function hideLoadingModal() {
+    const modal = $('#crudLoadingModal');
+    if (!modal) return;
+    modal.hidden = true;
+}
+
 export function showError(err) {
     showState('error', err?.message || 'Terjadi kesalahan saat memuat data.', err?.hint || '');
 }

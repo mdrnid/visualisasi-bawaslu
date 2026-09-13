@@ -63,8 +63,8 @@ function gridToRaw(grid) {
     const nextRow = Array.isArray(grid[headerIndex + 1]) ? grid[headerIndex + 1] : null;
     const baseMap = buildColumnMap(grid[headerIndex], null);
     const namaCol = baseMap.indexOf('nama');
-    const nextNama = nextRow && namaCol >= 0 ? String(nextRow[namaCol] ?? '').trim() : '';
-    const isSubHeader = Boolean(nextRow) && headerScore(nextRow) >= 2 && (!nextNama || mapHeader(nextNama) !== null);
+    // FIX C5: Threshold dinaikkan ke >= 3 agar baris data pertama tidak salah terdeteksi sebagai sub-header
+    const isSubHeader = Boolean(nextRow) && headerScore(nextRow) >= 3 && (!nextNama || mapHeader(nextNama) !== null);
 
     const columnMap = buildColumnMap(grid[headerIndex], isSubHeader ? nextRow : null);
     const firstDataRow = headerIndex + (isSubHeader ? 2 : 1);
@@ -199,6 +199,8 @@ export async function loadDataset({ force = false } = {}) {
         records,
         issues,
         mtime: mtime || Date.now(), // <-- Simpan mtime untuk optimistic concurrency
+        isStale: Boolean(resJson._stale),
+        serverWarning: resJson._warning || null,
         meta: {
             ...meta,
             sheetName,
@@ -209,6 +211,13 @@ export async function loadDataset({ force = false } = {}) {
             unmappedColumns: meta.totalColumns - meta.recognized,
         },
     };
-    writeCache(payload);
+
+    // FIX A7+A8: Jangan simpan data basi/stale ke sessionStorage
+    if (!resJson._stale) {
+        writeCache(payload);
+    } else {
+        console.warn('[data-service] Data ditandai stale oleh server, tidak disimpan ke cache:', resJson._warning);
+    }
+
     return { ...payload, fromCache: false };
 }

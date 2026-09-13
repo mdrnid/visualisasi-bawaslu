@@ -2173,3 +2173,110 @@ label[for="iFotoFile"]:active {
     color: #0369a1;
     text-decoration: underline;
 }
+
+/* ==================== CRUD LOADING MODAL POPUP ==================== */
+.crud-loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease;
+}
+
+.crud-loading-overlay:not([hidden]) {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.crud-loading-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.62);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.crud-loading-card {
+    position: relative;
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 32px 36px;
+    width: 100%;
+    max-width: 360px;
+    text-align: center;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(226, 232, 240, 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    transform: scale(0.92);
+    transition: transform .25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crud-loading-overlay:not([hidden]) .crud-loading-card {
+    transform: scale(1);
+}
+
+.crud-loading-spinner-box {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.crud-loading-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 3.5px solid rgba(226, 232, 240, 0.8);
+    border-top-color: #D97706; /* Bawaslu Amber */
+    border-right-color: #2563EB; /* Blue accent */
+    animation: crudSpin 0.85s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+}
+
+.crud-loading-logo-icon {
+    color: #D97706;
+    animation: crudPulse 1.8s ease-in-out infinite;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.crud-loading-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.crud-loading-title {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+    color: #0F172A;
+    letter-spacing: -0.01em;
+}
+
+.crud-loading-desc {
+    margin: 0;
+    font-size: 13px;
+    color: #64748B;
+    line-height: 1.45;
+}
+
+@keyframes crudSpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes crudPulse {
+    0%, 100% { transform: scale(0.92); opacity: 0.8; }
+    50% { transform: scale(1.08); opacity: 1; }
+}
+

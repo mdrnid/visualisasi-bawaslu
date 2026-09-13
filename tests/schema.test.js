@@ -7,6 +7,7 @@ import {
     validateRecord,
     isBlank,
     normalizeRecord,
+    normKabkota,
 } from '../assets/js/schema.js';
 
 describe('schema.js Data Contract', () => {
@@ -40,7 +41,7 @@ describe('schema.js Data Contract', () => {
             expect(normGender('pria')).toBe('Laki-laki');
             expect(normGender('p')).toBe('Perempuan');
             expect(normGender('wanita')).toBe('Perempuan');
-            expect(normGender('Random')).toBe('Random');
+            expect(normGender('Random')).toBe('');
         });
     });
 
@@ -103,6 +104,56 @@ describe('schema.js Data Contract', () => {
             expect(normalized.provinsi).toBe('Sulawesi Selatan');
             expect(normalized.kabkota).toBe('Bone');
             expect(normalized.nama).toBe('Alwi');
+        });
+
+        it('should correctly normalize and preserve academic titles with comma and period', () => {
+            const raw1 = { nama: 'Muhammad Alwi, S.Ag.,M.Pd' };
+            const raw2 = { nama: 'Muhammad Alwi, S.Ag.,m.Pd' };
+            const raw3 = { nama: 'MUHAMMAD ALWI, S.AG., M.PD' };
+            const raw4 = { nama: 'Andi Baso, S.IP' };
+
+            expect(normalizeRecord(raw1, 0).nama).toBe('Muhammad Alwi, S.Ag.,M.Pd');
+            expect(normalizeRecord(raw2, 0).nama).toBe('Muhammad Alwi, S.Ag.,M.Pd');
+            expect(normalizeRecord(raw3, 0).nama).toBe('Muhammad Alwi, S.Ag., M.Pd');
+            expect(normalizeRecord(raw4, 0).nama).toBe('Andi Baso, S.IP');
+        });
+
+        it('should normalize kabkota to canonical naming in normalizeRecord', () => {
+            expect(normalizeRecord({ kabkota: 'Pangkajene dan Kepulauan' }, 0).kabkota).toBe('Pangkep');
+            expect(normalizeRecord({ kabkota: 'Makassar' }, 0).kabkota).toBe('Kota Makassar');
+            expect(normalizeRecord({ kabkota: 'Kota Makassar' }, 0).kabkota).toBe('Kota Makassar');
+            expect(normalizeRecord({ kabkota: 'Kabupaten Takalar' }, 0).kabkota).toBe('Takalar');
+            expect(normalizeRecord({ kabkota: 'Sidenreng Rappang' }, 0).kabkota).toBe('Sidrap');
+            expect(normalizeRecord({ kabkota: 'Kepulauan Selayar' }, 0).kabkota).toBe('Selayar');
+        });
+    });
+
+    describe('normKabkota()', () => {
+        it('should normalize aliases to canonical names', () => {
+            expect(normKabkota('Makassar')).toBe('Kota Makassar');
+            expect(normKabkota('Kota Makassar')).toBe('Kota Makassar');
+            expect(normKabkota('kotamadya makassar')).toBe('Kota Makassar');
+            expect(normKabkota('Pangkajene dan Kepulauan')).toBe('Pangkep');
+            expect(normKabkota('Kabupaten Pangkep')).toBe('Pangkep');
+            expect(normKabkota('pangkep')).toBe('Pangkep');
+            expect(normKabkota('Parepare')).toBe('Kota Parepare');
+            expect(normKabkota('Kota Parepare')).toBe('Kota Parepare');
+            expect(normKabkota('Pare-Pare')).toBe('Kota Parepare');
+            expect(normKabkota('Palopo')).toBe('Kota Palopo');
+            expect(normKabkota('Kota Palopo')).toBe('Kota Palopo');
+            expect(normKabkota('Kabupaten Takalar')).toBe('Takalar');
+            expect(normKabkota('Takalar')).toBe('Takalar');
+            expect(normKabkota('Sidenreng Rappang')).toBe('Sidrap');
+            expect(normKabkota('Sidrap')).toBe('Sidrap');
+            expect(normKabkota('Kepulauan Selayar')).toBe('Selayar');
+            expect(normKabkota('Selayar')).toBe('Selayar');
+            expect(normKabkota('Kabupaten Bantaeng')).toBe('Bantaeng');
+            expect(normKabkota('Bantaeng')).toBe('Bantaeng');
+            expect(normKabkota('Luwu Timur')).toBe('Luwu Timur');
+            expect(normKabkota('lutim')).toBe('Luwu Timur');
+            expect(normKabkota('Provinsi Sulawesi Selatan')).toBe('Provinsi Sulawesi Selatan');
+            expect(normKabkota('Sulawesi Selatan')).toBe('Provinsi Sulawesi Selatan');
+            expect(normKabkota('')).toBe('');
         });
     });
 });

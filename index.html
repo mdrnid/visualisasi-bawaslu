@@ -247,23 +247,23 @@
                 <option value="Enrekang">Kabupaten Enrekang</option>
                 <option value="Gowa">Kabupaten Gowa</option>
                 <option value="Jeneponto">Kabupaten Jeneponto</option>
-                <option value="Kepulauan Selayar">Kabupaten Kepulauan Selayar</option>
+                <option value="Selayar">Kabupaten Kepulauan Selayar</option>
                 <option value="Luwu">Kabupaten Luwu</option>
                 <option value="Luwu Timur">Kabupaten Luwu Timur</option>
                 <option value="Luwu Utara">Kabupaten Luwu Utara</option>
                 <option value="Maros">Kabupaten Maros</option>
-                <option value="Pangkajene dan Kepulauan">Kabupaten Pangkajene dan Kepulauan</option>
+                <option value="Pangkep">Kabupaten Pangkajene dan Kepulauan (Pangkep)</option>
                 <option value="Pinrang">Kabupaten Pinrang</option>
-                <option value="Sidenreng Rappang">Kabupaten Sidenreng Rappang</option>
+                <option value="Sidrap">Kabupaten Sidenreng Rappang (Sidrap)</option>
                 <option value="Sinjai">Kabupaten Sinjai</option>
                 <option value="Soppeng">Kabupaten Soppeng</option>
                 <option value="Takalar">Kabupaten Takalar</option>
                 <option value="Tana Toraja">Kabupaten Tana Toraja</option>
                 <option value="Toraja Utara">Kabupaten Toraja Utara</option>
                 <option value="Wajo">Kabupaten Wajo</option>
-                <option value="Makassar">Kota Makassar</option>
-                <option value="Palopo">Kota Palopo</option>
-                <option value="Parepare">Kota Parepare</option>
+                <option value="Kota Makassar">Kota Makassar</option>
+                <option value="Kota Palopo">Kota Palopo</option>
+                <option value="Kota Parepare">Kota Parepare</option>
               </select>
             </div>
         </div>
@@ -408,6 +408,25 @@
     </button>
   </p>
 </footer>
+
+<!-- Pop-up Modal Loading Animasi untuk Operasi CRUD (Tambah, Edit, Hapus) -->
+<div class="crud-loading-overlay" id="crudLoadingModal" role="dialog" aria-modal="true" aria-live="assertive" hidden>
+  <div class="crud-loading-backdrop"></div>
+  <div class="crud-loading-card">
+    <div class="crud-loading-spinner-box">
+      <div class="crud-loading-ring"></div>
+      <div class="crud-loading-logo-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+      </div>
+    </div>
+    <div class="crud-loading-info">
+      <h3 class="crud-loading-title" id="crudLoadingTitle">Mengedit Data...</h3>
+      <p class="crud-loading-desc" id="crudLoadingDesc">Menyimpan perubahan ke server...</p>
+    </div>
+  </div>
+</div>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 

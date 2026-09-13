@@ -12,7 +12,7 @@ export const APP_CONFIG = {
     cache: {
         enabled: true,
         key: 'bawaslu-personel-cache-v4',
-        ttlMinutes: 15,
+        ttlMinutes: 1, // FIX A8: 15 menit terlalu lama → data basi. 1 menit cukup untuk mengurangi load.
     },
 
     ui: {

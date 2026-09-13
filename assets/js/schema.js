@@ -145,7 +145,18 @@ export function headerScore(row) {
 
 /* ---------- Normalisasi nilai ---------- */
 
-const titleCase = (s) => s.toLowerCase().replace(/(^|[\s./-])([a-z\u00e0-\u00ff])/g, (m, p, c) => p + c.toUpperCase());
+export const titleCase = (s) => s.toLowerCase().replace(/(^|[\s.,\/-])([a-z\u00e0-\u00ff])/g, (m, p, c) => p + c.toUpperCase());
+
+export function normName(s) {
+    if (!s) return '';
+    const str = String(s).trim().replace(/\s+/g, ' ');
+    // Jika seluruhnya huruf kapital (mis. data mentah Excel "MARDIANA RUSLI"), konversi ke titleCase
+    if (str === str.toUpperCase()) {
+        return titleCase(str);
+    }
+    // Jika sudah mixed-case, kapitalisasi awal kata/setelah delimiter (termasuk tanda baca koma) tanpa merusak huruf kapital yang disengaja (mis. S.IP, M.Pd, Ph.D)
+    return str.replace(/(^|[\s.,\/-])([a-z\u00e0-\u00ff])/g, (m, p, c) => p + c.toUpperCase());
+}
 
 export const isBlank = (v) => {
     const s = String(v ?? '')
@@ -161,7 +172,9 @@ export function normGender(v) {
     const FEMALE = ['PEREMPUAN', 'WANITA', 'FEMALE'];
     if (MALE.includes(n) || n === 'L' || n === 'M' || n === 'LK') return 'Laki-laki';
     if (FEMALE.includes(n) || n === 'P' || n === 'W' || n === 'F' || n === 'PR') return 'Perempuan';
-    return titleCase(String(v).trim());
+    // FIX C3: Whitelist ketat — nilai tak dikenal → kosong (bukan titleCase)
+    console.warn(`[schema] Gender tidak dikenal: "${v}" → diabaikan`);
+    return '';
 }
 
 export function normPendidikan(v) {
@@ -191,6 +204,57 @@ export function normAgama(v) {
         KHONGHUCU: 'Konghucu',
     };
     return map[n] || (v ? titleCase(String(v).trim()) : '');
+}
+
+/**
+ * Normalisasi nama Kabupaten/Kota ke standar kanonik 24 Kab/Kota Bawaslu Sulsel.
+ * Menangani variasi ejaan, singkatan, serta prefiks 'Kabupaten' / 'Kota'.
+ */
+export function normKabkota(v) {
+    if (!v) return '';
+    const raw = String(v).trim().replace(/\s+/g, ' ');
+    if (!raw) return '';
+
+    const cleanLower = raw.toLowerCase()
+        .replace(/^(kabupaten|kab\.|kab)\s+/i, '')
+        .replace(/^(kotamadya|kota)\s+/i, '')
+        .trim();
+
+    // Map alias khusus & singkatan
+    if (cleanLower === 'makassar' || cleanLower === 'ujung pandang') return 'Kota Makassar';
+    if (cleanLower === 'palopo') return 'Kota Palopo';
+    if (cleanLower === 'parepare' || cleanLower === 'pare-pare' || cleanLower === 'pare pare') return 'Kota Parepare';
+    if (cleanLower === 'pangkep' || cleanLower.includes('pangkajene')) return 'Pangkep';
+    if (cleanLower === 'sidrap' || cleanLower.includes('sidenreng')) return 'Sidrap';
+    if (cleanLower.includes('selayar')) return 'Selayar';
+    if (cleanLower === 'takalar') return 'Takalar';
+    if (cleanLower === 'bantaeng') return 'Bantaeng';
+    if (cleanLower === 'barru') return 'Barru';
+    if (cleanLower === 'bone') return 'Bone';
+    if (cleanLower === 'bulukumba') return 'Bulukumba';
+    if (cleanLower === 'enrekang') return 'Enrekang';
+    if (cleanLower === 'gowa') return 'Gowa';
+    if (cleanLower === 'jeneponto') return 'Jeneponto';
+    if (cleanLower === 'luwu') return 'Luwu';
+    if (cleanLower === 'luwu timur' || cleanLower === 'lutim') return 'Luwu Timur';
+    if (cleanLower === 'luwu utara' || cleanLower === 'lutra') return 'Luwu Utara';
+    if (cleanLower === 'maros') return 'Maros';
+    if (cleanLower === 'pinrang') return 'Pinrang';
+    if (cleanLower === 'sinjai') return 'Sinjai';
+    if (cleanLower === 'soppeng') return 'Soppeng';
+    if (cleanLower === 'tana toraja' || cleanLower === 'tator') return 'Tana Toraja';
+    if (cleanLower === 'toraja utara' || cleanLower === 'torut') return 'Toraja Utara';
+    if (cleanLower === 'wajo') return 'Wajo';
+    if (cleanLower.includes('sulawesi selatan') || cleanLower === 'sulsel') {
+        return 'Provinsi Sulawesi Selatan';
+    }
+
+    // Jika berawalan Kota di input aslinya
+    if (/^kota\s+/i.test(raw)) {
+        return 'Kota ' + titleCase(raw.replace(/^kota\s+/i, '').trim());
+    }
+
+    return titleCase(cleanLower);
 }
 
 /**
@@ -251,9 +315,13 @@ export function normalizeRecord(raw, index, cc = '62') {
                 rec[f.key] = normAgama(s);
                 break;
             case 'provinsi':
-            case 'kabkota':
-            case 'nama':
                 rec[f.key] = titleCase(s);
+                break;
+            case 'kabkota':
+                rec[f.key] = normKabkota(s);
+                break;
+            case 'nama':
+                rec[f.key] = normName(s);
                 break;
             case 'hp':
                 rec[f.key] = normPhone(s, cc);
@@ -274,26 +342,23 @@ export function normalizeRecord(raw, index, cc = '62') {
         }
     }
     
-    // AUTO-RESOLVE FOTO: Jika kolom foto kosong, generate path berdasarkan nama
-    // Gunakan slugify (lowercase-with-dash) agar konsisten dengan upload foto di server
+    // FIX C2: TIDAK auto-generate path foto. Path turunan hanya untuk tampilan (resolusi di UI).
+    // Jika foto ada, normalisasi path-nya.
+    if (rec.foto) {
+        // Fallback: jika path foto tidak dimulai dengan 'assets/', tambahkan prefix
+        if (!rec.foto.startsWith('assets/') && !rec.foto.startsWith('http')) {
+            rec.foto = 'assets/personel/' + rec.foto;
+        }
+    }
+    
+    // _fotoResolved: path turunan untuk tampilan UI (avatar), TIDAK ditulis ke DB
     if (!rec.foto && rec.nama) {
         const slugNama = slugify(rec.nama);
         if (slugNama) {
-            rec.foto = 'assets/personel/' + slugNama + '.webp';
+            rec._fotoResolved = 'assets/personel/' + slugNama + '.webp';
         }
-    }
-    
-    // Fallback: jika path foto tidak dimulai dengan 'assets/', tambahkan prefix
-    if (rec.foto && !rec.foto.startsWith('assets/')) {
-        rec.foto = 'assets/personel/' + rec.foto;
-    }
-    
-    // Ensure .webp extension
-    if (rec.foto && !rec.foto.endsWith('.webp') && !rec.foto.includes('.jpg') && !rec.foto.includes('.png')) {
-        rec.foto = rec.foto.replace(/\.(jpg|jpeg|png)$/i, '.webp');
-        if (!rec.foto.endsWith('.webp')) {
-            rec.foto += '.webp';
-        }
+    } else {
+        rec._fotoResolved = rec.foto || '';
     }
     
     // Perbaikan: jika kabkota sama dengan provinsi, ubah menjadi format "Provinsi [Nama]"
@@ -319,44 +384,53 @@ export function normalizeRecord(raw, index, cc = '62') {
 }
 
 /**
- * Memberi _id unik & stabil. Dipanggil sekali setelah seluruh record dinormalisasi,
- * karena deteksi tabrakan butuh melihat semua baris.
- */
-/**
  * Assign ID stabil ke setiap record.
- * - Bila record sudah punya field `id` (dari Excel), gunakan itu.
- * - Bila belum, generate ID format PRS-XXXX berdasarkan urutan.
- * - Untuk backward compatibility, juga assign `_id` untuk kode lama yang masih pakai itu.
+ * 
+ * FIX A1: TIDAK LAGI menghasilkan PRS-XXXX — itu personnel_code server.
+ * - Bila record sudah punya field `id` (UUID dari DB), gunakan itu.
+ * - Bila belum (baris baru), beri `_localId = 'tmp_' + uuid` dan `_isNew = true`.
+ *   rec.id TIDAK diisi — hanya server yang menentukan UUID asli.
  */
+function generateLocalId() {
+    if (typeof globalThis !== 'undefined' && globalThis.crypto?.randomUUID) {
+        return 'tmp_' + globalThis.crypto.randomUUID();
+    }
+    return 'tmp_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 export function assignStableIds(records) {
     const seen = new Map();
     const idSeen = new Set();
-    let autoCounter = 1;
     
     for (const rec of records) {
-        // 1. Cek apakah record sudah punya ID dari DB / Excel (UUID atau string ID)
+        // 1. Cek apakah record sudah punya ID dari DB (UUID)
         if (rec.id && typeof rec.id === 'string' && rec.id.trim()) {
             const cleanId = rec.id.trim();
-            if (!idSeen.has(cleanId)) {
+            // Skip ID buatan klien (row-new-*, PRS-*, tmp_*)
+            if (cleanId.startsWith('row-new-') || cleanId.startsWith('PRS-') || cleanId.startsWith('tmp_')) {
+                // Ini baris baru, jangan pakai sebagai id
+                rec.id = undefined;
+                rec._localId = generateLocalId();
+                rec._isNew = true;
+                rec._id = rec._localId;
+            } else if (!idSeen.has(cleanId)) {
                 rec.id = cleanId;
-                rec._id = cleanId; // backward compatibility
+                rec._id = cleanId;
+                rec._isNew = false;
                 idSeen.add(cleanId);
-                continue;
             } else {
-                console.warn(`[schema] ID duplikat: ${cleanId}, generate baru`);
+                console.warn(`[schema] ID duplikat: ${cleanId}, tandai sebagai baru`);
+                rec.id = undefined;
+                rec._localId = generateLocalId();
+                rec._isNew = true;
+                rec._id = rec._localId;
             }
+        } else {
+            // 2. Record tanpa ID = baris baru
+            rec._localId = generateLocalId();
+            rec._isNew = true;
+            rec._id = rec._localId;
         }
-        
-        // 2. Generate ID baru (PRS-XXXX zero-padded 4 digit)
-        let newId;
-        do {
-            newId = `PRS-${String(autoCounter).padStart(4, '0')}`;
-            autoCounter++;
-        } while (idSeen.has(newId));
-        
-        rec.id = newId;
-        rec._id = newId; // backward compatibility
-        idSeen.add(newId);
         
         // 3. Untuk backward compatibility, assign _key juga
         const base = rec._key || 'baris-' + rec._rowNumber;

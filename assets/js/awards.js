@@ -185,6 +185,7 @@ function safeBukti(rawBukti) {
 
 /** Normalisasi satu penghargaan mentah menjadi objek siap tampil. */
 export function normalizeAward(raw, index = 0) {
+    const personnel_id = String(raw?.personnel_id ?? raw?.personnelId ?? '').trim();
     const kabkota = String(raw?.kabkota ?? raw?.['Kab/Kota'] ?? '').trim();
     const nama = String(raw?.nama ?? raw?.Nama ?? '').trim();
     const penghargaan = String(raw?.penghargaan ?? '').trim();
@@ -194,6 +195,7 @@ export function normalizeAward(raw, index = 0) {
         _id: 'award-' + (index + 1),
         _personKey: personKey(kabkota, nama),
         _nameKey: nameKey(nama),
+        personnel_id,
         kabkota,
         nama,
         jabatan: String(raw?.jabatan ?? '').trim(),
@@ -235,6 +237,7 @@ function compareAwards(a, b) {
  * @returns {{matchedPeople:number, matchedAwards:number, unmatched:Array}}
  */
 export function attachAwards(records = [], awards = []) {
+    const byPersonnelId = new Map();
     const byPerson = new Map();
     const byName = new Map();
     const push = (map, key, value) => {
@@ -244,6 +247,7 @@ export function attachAwards(records = [], awards = []) {
         else map.set(key, [value]);
     };
     for (const a of awards) {
+        if (a.personnel_id) push(byPersonnelId, a.personnel_id, a);
         push(byPerson, a._personKey, a);
         push(byName, a._nameKey, a);
     }
@@ -259,6 +263,12 @@ export function attachAwards(records = [], awards = []) {
             if (items) for (const a of items) found.set(a._id, a);
         };
 
+        // Prioritas 1: Cocokkan via UUID id personnel (tidak terpengaruh pengubahan nama)
+        if (rec.id && byPersonnelId.has(rec.id)) {
+            collect(byPersonnelId.get(rec.id));
+        }
+
+        // Fallback untuk backward compatibility: cocokkan via nama dan wilayah
         collect(byPerson.get(region + '|' + nk));
         collect(byName.get(nk));
 
