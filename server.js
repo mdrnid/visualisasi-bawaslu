@@ -674,7 +674,7 @@ app.patch('/api/personnel/:id', requireAuth, async (req, res) => {
     }
 });
 
-// ---------- DELETE /api/personnel/:id — Soft delete dengan version check ----------
+// ---------- DELETE /api/personnel/:id — Hard delete dengan version check ----------
 app.delete('/api/personnel/:id', requireAuth, async (req, res) => {
     const startMs = Date.now();
     try {
@@ -692,13 +692,36 @@ app.delete('/api/personnel/:id', requireAuth, async (req, res) => {
         // FIX A6: Invalidasi cache SEBELUM tulis
         invalidateCache();
 
-        const deletePayload = { deleted_at: new Date().toISOString() };
-        
+        // Bersihkan berkas bukti penghargaan terkait di storage & disk lokal sebelum relasi dihapus (cascade di DB)
+        try {
+            const { data: relatedAwards } = await supabaseAdmin
+                .from('awards')
+                .select('proof_object_path, proof_local_path')
+                .eq('personnel_id', id);
+
+            if (relatedAwards && relatedAwards.length > 0) {
+                for (const a of relatedAwards) {
+                    if (a.proof_object_path) {
+                        try {
+                            await supabaseAdmin.storage.from('award-proofs').remove([a.proof_object_path]);
+                        } catch (err) {}
+                    }
+                    if (a.proof_local_path) {
+                        try {
+                            const p = path.resolve(__dirname, a.proof_local_path);
+                            if (fs.existsSync(p)) fs.unlinkSync(p);
+                        } catch (err) {}
+                    }
+                }
+            }
+        } catch (proofErr) {
+            console.warn('[server] Gagal membersihkan berkas bukti penghargaan:', proofErr.message);
+        }
+
         let query = supabaseAdmin
             .from('personnel')
-            .update(deletePayload)
-            .eq('id', id)
-            .is('deleted_at', null);
+            .delete()
+            .eq('id', id);
         
         // Jika version dikirim, gunakan untuk optimistic locking
         if (clientVersion) {
@@ -714,15 +737,12 @@ app.delete('/api/personnel/:id', requireAuth, async (req, res) => {
         if (!data || data.length === 0) {
             const { data: current } = await supabaseAdmin
                 .from('personnel')
-                .select('id, deleted_at, version')
+                .select('id, version')
                 .eq('id', id)
                 .maybeSingle();
             
             if (!current) {
-                return res.status(404).json({ ok: false, code: 'NOT_FOUND', error: 'Record tidak ditemukan.' });
-            }
-            if (current.deleted_at) {
-                return res.status(410).json({ ok: false, code: 'ALREADY_DELETED', error: 'Record sudah dihapus sebelumnya.' });
+                return res.status(404).json({ ok: false, code: 'NOT_FOUND', error: 'Record tidak ditemukan atau sudah dihapus.' });
             }
             return res.status(409).json({
                 ok: false,
@@ -732,18 +752,53 @@ app.delete('/api/personnel/:id', requireAuth, async (req, res) => {
             });
         }
 
+        const deletedRecord = data[0];
+
+        // Hapus foto dari Supabase Storage jika ada
+        if (deletedRecord.photo_object_path) {
+            try {
+                await supabaseAdmin.storage.from('public-photos').remove([deletedRecord.photo_object_path]);
+            } catch (sErr) {
+                console.warn('[server] Gagal menghapus foto dari storage:', sErr.message);
+            }
+        }
+
+        // Hapus foto fisik dari disk lokal jika ada
+        if (deletedRecord.photo_local_path) {
+            try {
+                const fullLocalPath = path.resolve(__dirname, deletedRecord.photo_local_path);
+                if (fs.existsSync(fullLocalPath)) {
+                    fs.unlinkSync(fullLocalPath);
+                }
+            } catch (fErr) {
+                console.warn('[server] Gagal menghapus foto fisik lokal:', fErr.message);
+            }
+        }
+
+        // Catat ke audit log
+        try {
+            await supabaseAdmin.from('personnel_audit').insert({
+                personnel_id: id,
+                action: 'DELETE',
+                old_values: deletedRecord,
+                version_before: deletedRecord.version,
+            });
+        } catch (aErr) {
+            // non-fatal
+        }
+
         // FIX A6: Invalidasi cache SETELAH tulis
         invalidateCache();
 
         logMutation('DELETE', {
             personnelId: id,
-            personnelName: data[0]?.name,
+            personnelName: deletedRecord.name,
             rowsAffected: data.length,
             versionBefore: clientVersion,
             durationMs: Date.now() - startMs,
         });
 
-        return res.json({ ok: true, deleted: true, id });
+        return res.json({ ok: true, deleted: true, id, name: deletedRecord.name });
     } catch (err) {
         console.error('[server] DELETE /api/personnel error:', err);
         res.status(500).json({ ok: false, error: 'Gagal menghapus record: ' + err.message });
@@ -910,22 +965,46 @@ app.post('/api/save', requireAuth, async (req, res) => {
             }
         }
 
-        // SOFT DELETE untuk record yang tidak dikirim
-        // FIX B3: Cek error pada setiap soft-delete
+        // HARD DELETE untuk record yang tidak dikirim dalam sinkronisasi
         let deletedCount = 0;
         for (const existing of currentDbRows) {
             if (!touchedIds.has(existing.id)) {
+                // Bersihkan berkas foto jika ada
+                if (existing.photo_object_path) {
+                    try {
+                        await supabaseAdmin.storage.from('public-photos').remove([existing.photo_object_path]);
+                    } catch (sErr) {
+                        console.warn('[server] Gagal hapus foto storage saat bulk delete:', sErr.message);
+                    }
+                }
+                if (existing.photo_local_path) {
+                    try {
+                        const fullLocalPath = path.resolve(__dirname, existing.photo_local_path);
+                        if (fs.existsSync(fullLocalPath)) {
+                            fs.unlinkSync(fullLocalPath);
+                        }
+                    } catch (fErr) {}
+                }
+
                 const { error: dErr, data: dData } = await supabaseAdmin
                     .from('personnel')
-                    .update({ deleted_at: new Date().toISOString() })
+                    .delete()
                     .eq('id', existing.id)
-                    .is('deleted_at', null)
-                    .select('id');
+                    .select('id, name, version');
 
                 if (dErr) {
-                    errors.push({ nama: existing.name, error: 'Gagal soft-delete: ' + dErr.message });
+                    errors.push({ nama: existing.name, error: 'Gagal delete dari database: ' + dErr.message });
                 } else if (dData && dData.length > 0) {
                     deletedCount++;
+                    try {
+                        await supabaseAdmin.from('personnel_audit').insert({
+                            personnel_id: existing.id,
+                            action: 'DELETE',
+                            old_values: existing,
+                            version_before: existing.version,
+                        });
+                    } catch (aErr) {}
+
                     logMutation('BULK_DELETE', {
                         personnelId: existing.id,
                         personnelName: existing.name,

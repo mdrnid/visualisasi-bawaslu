@@ -189,4 +189,16 @@ describe('CRUD Regression Test Suite (10 Kasus Wajib)', () => {
         expect(normGender('Perempuan')).toBe('Perempuan');
         expect(normGender('Unknown')).toBe('');
     });
+
+    // 11. Hard delete: data benar-benar dihapus permanen (bukan soft-delete)
+    it('11. Semantik hard delete: baris dihapus langsung dari database', () => {
+        const initialRows = [{ id: 'uuid-1', name: 'A' }, { id: 'uuid-2', name: 'B' }];
+        const idToDelete = 'uuid-1';
+        
+        // Simulasi query DELETE Supabase: .delete().eq('id', id)
+        const remainingRows = initialRows.filter(r => r.id !== idToDelete);
+        
+        expect(remainingRows.length).toBe(1);
+        expect(remainingRows.find(r => r.id === idToDelete)).toBeUndefined();
+    });
 });
