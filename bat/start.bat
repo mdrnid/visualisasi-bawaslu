@@ -10,7 +10,8 @@ if not exist "node_modules\" (
 
 :: Jalankan server di background dengan VBScript
 echo Set WshShell = CreateObject("WScript.Shell") > "%temp%\start_server.vbs"
-echo WshShell.Run "cmd /c cd /d ""%cd%"" && npm run dev > server.log 2>&1", 0, False >> "%temp%\start_server.vbs"
+echo WshShell.CurrentDirectory = "%~dp0.." >> "%temp%\start_server.vbs"
+echo WshShell.Run "cmd /c node server.js >> server.log 2>&1", 0, False >> "%temp%\start_server.vbs"
 cscript //nologo "%temp%\start_server.vbs"
 del "%temp%\start_server.vbs"
 

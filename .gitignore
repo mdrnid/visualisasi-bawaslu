@@ -63,3 +63,4 @@ server.log
 tunnel.log
 
 .agent/
+docs/

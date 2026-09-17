@@ -10,57 +10,36 @@ echo  ==============================================
 echo    BAWASLU PROJECT - CONTROL PANEL
 echo  ==============================================
 echo.
-echo   [1] Start Server (Background - Auto Close)
-echo   [2] Start Server (Window Mode - Show Logs)
-echo   [3] Start Server (Local Only - No Tunnel)
+echo   [1] Start Server (Latar Belakang / Background)
+echo   [2] Stop Server (Hentikan Server)
+echo   [3] Restart Server
 echo.
-echo   [4] Stop Server
-echo   [5] Restart Server
+echo   [4] Cek IP Address Lokal (WiFi/LAN)
+echo   [5] Pasang Autostart (Jalan Otomatis Saat PC Nyala)
+echo   [6] Hapus Autostart (Matikan Autostart)
 echo.
-echo   [6] View Server Status
-echo   [7] View Logs
+echo   [B] Buka di Browser (localhost:8080)
 echo.
-echo   [8] Get Local IP Address (LAN/WiFi)
-echo   [9] Setup Firewall (Run as Admin)
-echo.
-echo   [B] Open in Browser (localhost:8080)
-echo.
-echo   [0] Exit
+echo   [0] Keluar
 echo.
 echo  ==============================================
 echo.
-set /p choice="  Pilih menu (0-9/B): "
+set /p choice="  Pilih menu (0-6/B): "
 
 if /i "%choice%"=="1" goto start_background
-if /i "%choice%"=="2" goto start_window
-if /i "%choice%"=="3" goto start_local
-if /i "%choice%"=="4" goto stop_server
-if /i "%choice%"=="5" goto restart_server
-if /i "%choice%"=="6" goto view_status
-if /i "%choice%"=="7" goto view_logs
-if /i "%choice%"=="8" goto get_ip
-if /i "%choice%"=="9" goto setup_firewall
+if /i "%choice%"=="2" goto stop_server
+if /i "%choice%"=="3" goto restart_server
+if /i "%choice%"=="4" goto get_ip
+if /i "%choice%"=="5" goto install_startup
+if /i "%choice%"=="6" goto remove_startup
 if /i "%choice%"=="B" goto open_browser
 if /i "%choice%"=="0" goto exit
 goto menu
 
 :start_background
 cls
-echo.
-echo Starting server in background...
-echo.
 call "%~dp0start.bat"
 goto menu
-
-:start_window
-cls
-call "%~dp0start-window.bat"
-goto wait_and_menu
-
-:start_local
-cls
-call "%~dp0start-local.bat"
-goto wait_and_menu
 
 :stop_server
 cls
@@ -69,35 +48,25 @@ goto wait_and_menu
 
 :restart_server
 cls
-call "%~dp0restart.bat"
-goto wait_and_menu
-
-:view_status
-cls
-call "%~dp0status.bat"
-goto wait_and_menu
-
-:view_logs
-cls
-call "%~dp0view-logs.bat"
-goto wait_and_menu
+echo Restarting server...
+call "%~dp0stop.bat"
+timeout /t 1 /nobreak > nul
+call "%~dp0start.bat"
+goto menu
 
 :get_ip
 cls
 call "%~dp0get-local-ip.bat"
 goto wait_and_menu
 
-:setup_firewall
+:install_startup
 cls
-echo.
-echo [!] Script firewall memerlukan hak Administrator
-echo     Window baru akan terbuka...
-echo.
-timeout /t 2 /nobreak > nul
-powershell -Command "Start-Process '%~dp0setup-firewall.bat' -Verb RunAs"
-echo.
-echo Setelah selesai setup firewall, tekan tombol apapun...
-pause > nul
+call "%~dp0pasang-startup.bat"
+goto menu
+
+:remove_startup
+cls
+call "%~dp0hapus-startup.bat"
 goto menu
 
 :open_browser
@@ -109,7 +78,7 @@ goto menu
 
 :wait_and_menu
 echo.
-echo Press any key to return to menu...
+echo Tekan sembarang tombol untuk kembali ke menu...
 pause > nul
 goto menu
 
@@ -117,7 +86,7 @@ goto menu
 cls
 echo.
 echo  ==============================================
-echo    Thank you for using Bawaslu Project!
+echo    Terima kasih telah menggunakan Bawaslu Project!
 echo  ==============================================
 echo.
 timeout /t 2 /nobreak > nul

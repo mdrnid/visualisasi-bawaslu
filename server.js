@@ -17,6 +17,7 @@
  */
 'use strict';
 
+import 'dotenv/config';
 import express from 'express';
 import compression from 'compression';
 import path from 'node:path';
@@ -35,7 +36,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT || 8080);
-const HOST = process.env.HOST || '127.0.0.1'; // Default loopback (aman)
+const HOST = process.env.HOST || '0.0.0.0'; // Default 0.0.0.0 agar bisa diakses oleh komputer lain di jaringan WiFi/LAN
 const APP_TOKEN = process.env.APP_TOKEN || '';
 
 // Autentikasi opsional: jika APP_TOKEN kosong, login dinonaktifkan
@@ -164,6 +165,18 @@ app.use('/assets/js', express.static(path.join(__dirname, 'assets', 'js'), { ind
 app.use('/assets/image', express.static(path.join(__dirname, 'assets', 'image'), { index: false, dotfiles: 'deny', maxAge: 0 }));
 app.use('/assets/developed', express.static(path.join(__dirname, 'assets', 'developed'), { index: false, dotfiles: 'deny', maxAge: 0 }));
 app.use('/assets/personel', requireAuth, express.static(path.join(__dirname, 'assets', 'personel'), { index: false, dotfiles: 'deny', maxAge: 0 }));
+// Fallback jika berkas lokal tidak ada -> arahkan langsung ke Supabase Storage
+app.get('/assets/personel/:filename', requireAuth, (req, res, next) => {
+    const filename = req.params.filename;
+    if (!filename || filename === 'index.json') return next();
+    const { data: storageData } = supabaseAdmin.storage
+        .from('public-photos')
+        .getPublicUrl('personnel/' + filename);
+    if (storageData?.publicUrl) {
+        return res.redirect(302, storageData.publicUrl);
+    }
+    next();
+});
 app.use('/assets/awards', requireAuth, express.static(path.join(__dirname, 'assets', 'awards'), { index: false, dotfiles: 'deny', maxAge: 0 }));
 
 const page = (file) => (req, res) => res.sendFile(path.join(__dirname, file));
@@ -352,6 +365,16 @@ app.get('/api/data', requireAuth, async (req, res) => {
             const genderStr = p.gender === 'L' ? 'Laki-laki' : p.gender === 'P' ? 'Perempuan' : (p.gender || '');
             const amjStr = p.term_raw || (p.term_end ? p.term_end : '');
 
+            let photoUrl = p.photo_local_path || '';
+            if (p.photo_object_path) {
+                const { data: storageData } = supabaseAdmin.storage
+                    .from('public-photos')
+                    .getPublicUrl(p.photo_object_path);
+                if (storageData?.publicUrl) {
+                    photoUrl = storageData.publicUrl;
+                }
+            }
+
             grid.push([
                 p.id,
                 p.version,
@@ -372,7 +395,7 @@ app.get('/api/data', requireAuth, async (req, res) => {
                 p.facebook || '',
                 p.instagram || '',
                 p.website || '',
-                p.photo_local_path || '',
+                photoUrl,
             ]);
         }
 
@@ -530,8 +553,8 @@ app.post('/api/personnel', requireAuth, async (req, res) => {
             .from('personnel')
             .insert({
                 ...recordData,
-                is_published: false,
-                photo_is_public: false,
+                is_published: true,
+                photo_is_public: true,
                 // version default 1 dari skema, personnel_code dari sequence
             })
             .select()
@@ -858,8 +881,8 @@ app.post('/api/save', requireAuth, async (req, res) => {
                 // INSERT record baru — personnel_code dari sequence DB
                 const insertData = {
                     ...recordData,
-                    is_published: false,
-                    photo_is_public: false,
+                    is_published: true,
+                    photo_is_public: true,
                     // version default 1, personnel_code dari sequence
                 };
 
@@ -1086,7 +1109,7 @@ app.post('/api/save-awards', requireAuth, async (req, res) => {
                 category: a.kategori || null,
                 issuer: a.issuer || null,
                 proof_local_path: a.bukti || null,
-                is_published: false,
+                is_published: true,
             });
         }
 
@@ -1201,7 +1224,13 @@ app.use((err, req, res, next) => {
 
 if (process.env.NODE_ENV !== 'test') {
     app.listen(PORT, HOST, () => {
-        console.log(`Server berjalan di http://${HOST}:${PORT}`);
+        console.log(`Server berjalan di:`);
+        console.log(`  - Lokal   : http://localhost:${PORT}`);
+        if (HOST === '0.0.0.0') {
+            console.log(`  - Jaringan: http://[IP-Komputer]:${PORT} (bisa diakses via WiFi/LAN)`);
+        } else {
+            console.log(`  - Host    : http://${HOST}:${PORT}`);
+        }
         console.log(`Mode database: ${isDbConfigured() ? 'Supabase Postgres (schema: api)' : 'Fallback / Unconfigured'}`);
     });
 }
